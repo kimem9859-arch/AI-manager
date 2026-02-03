@@ -16,10 +16,10 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("API 키가 설정되지 않았습니다.")
 
-# ★ 모델 설정
+# ★ 모델 설정 (사용자 지정)
 model = genai.GenerativeModel('gemini-2.5-pro')
 
-# [기본] 구글 시트 연결 (메인 스프레드시트 자체를 가져옴)
+# [기본] 스프레드시트 파일 열기
 def get_spreadsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
@@ -28,35 +28,38 @@ def get_spreadsheet():
     except:
         creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
     client = gspread.authorize(creds)
+    # 스프레드시트 파일 이름이 "Safety_Project"가 맞는지 확인하세요!
     return client.open("Safety_Project")
 
-# [함수 1] 작업 리스트 가져오기 (첫 번째 시트 사용)
+# [수정됨] ★ '작업'이라는 이름의 시트를 콕 집어서 가져오기
 def connect_to_task_sheet():
     sh = get_spreadsheet()
-    return sh.sheet1 
+    try:
+        # 1순위: '작업'이라는 시트 찾기
+        return sh.worksheet("작업")
+    except:
+        # 만약 '작업' 시트가 없으면 -> 첫 번째 시트라도 가져오기 (비상용)
+        return sh.sheet1 
 
-# [함수 2] ★ 공지사항 전용 시트 연결 ('공지' 라는 이름의 탭 사용)
+# [수정됨] ★ '공지'라는 이름의 시트 가져오기
 def connect_to_notice_sheet():
     sh = get_spreadsheet()
     try:
-        # '공지'라는 이름의 탭을 찾습니다.
         return sh.worksheet("공지")
     except:
-        # 없으면 자동으로 만들어줍니다! (센스쟁이 기능)
+        # 없으면 자동 생성
         new_sheet = sh.add_worksheet(title="공지", rows="10", cols="2")
         new_sheet.update_cell(1, 1, "공지사항 없음")
         return new_sheet
 
-# 공지사항 읽기 (공지 시트 A1 셀)
 def get_notice():
     try:
         sheet = connect_to_notice_sheet()
         notice = sheet.cell(1, 1).value 
         return notice if notice else "공지사항 없음"
     except:
-        return "공지 로딩 실패"
+        return "-"
 
-# 공지사항 쓰기 (공지 시트 A1 셀)
 def update_notice(new_text):
     try:
         sheet = connect_to_notice_sheet()
@@ -69,7 +72,7 @@ def update_sheet_any(task_name, target_col, new_value):
     try:
         sheet = connect_to_task_sheet()
         cell = sheet.find(task_name)
-        col_map = {"상태": 3, "비고": 4, "세부내용": 2}
+        col_map = {"상태": 3, "비고": 4, "세부내용": 2} # 열 번호 확인 필요 (상태가 C열이면 3)
         idx = col_map.get(target_col)
         if idx:
             sheet.update_cell(cell.row, idx, new_value)
@@ -81,7 +84,8 @@ def update_sheet_any(task_name, target_col, new_value):
 def add_new_task(task_name):
     try:
         sheet = connect_to_task_sheet()
-        sheet.append_row([task_name, "설정필요", "대기", "-"])
+        # 새 작업 추가 시 기본값
+        sheet.append_row([task_name, "설정필요", "대기", "-"]) 
         return True
     except:
         return False
@@ -110,9 +114,10 @@ try:
     pending = len(df[df['상태'] == '대기']) if not df.empty else 0
     
 except:
-    st.error("⚠️ 시트 연결 실패!")
+    # 에러 발생 시 화면에 표시
+    st.error("⚠️ 시트 연결 오류! 시트 이름이 '작업'인지, 제목 줄(1행)이 있는지 확인하세요.")
     df = pd.DataFrame()
-    current_notice = "-"
+    current_notice = "연결 실패"
     total, done, pending = 0, 0, 0
 
 # ----------------------------------------------------------
@@ -124,7 +129,7 @@ with st.sidebar:
     st.header("⚙️ 설정")
     is_mobile = st.checkbox("📱 모바일 모드 (탭 보기)", value=False)
 
-# [개선 1] 모바일 최적화 통계 (커스텀 HTML)
+# 모바일 최적화 통계 (가로 배치)
 st.markdown(f"""
     <div style="
         display: flex; 
@@ -166,16 +171,15 @@ with container_sheet:
     if not df.empty:
         st.dataframe(df, use_container_width=True, height=400 if is_mobile else 600)
     else:
-        st.info("데이터 없음")
+        st.info("데이터가 없습니다. (시트 이름을 '작업'으로 바꿨는지 확인해주세요!)")
 
 # [왼쪽/탭1] 채팅 화면
 with container_chat:
-    if current_notice != "-":
+    if current_notice != "-" and current_notice != "공지사항 없음":
         st.info(f"📢 **공지:** {current_notice}")
         
     st.subheader("💬 AI 비서")
     
-    # 채팅 내역 박스
     chat_box_height = 400 if is_mobile else 550
     chat_container = st.container(height=chat_box_height, border=True)
 
@@ -186,7 +190,7 @@ with container_chat:
         for msg in st.session_state.messages:
             st.chat_message(msg["role"]).write(msg["content"])
 
-# [개선 2] 입력창 하단 고정
+# 입력창 하단 고정
 prompt = st.chat_input("명령을 입력하세요...")
 
 if prompt:
