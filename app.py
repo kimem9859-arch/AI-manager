@@ -7,48 +7,39 @@ import json
 import re 
 
 # ----------------------------------------------------------
-# 1. 초기 설정
+# 1. 초기 설정 & 함수
 # ----------------------------------------------------------
 st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API 키가 아직 설정되지 않았습니다. Streamlit 설정을 확인해주세요.")
+    st.error("API 키가 설정되지 않았습니다.")
 
-model = genai.GenerativeModel('gemini-2.5-pro')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 기존의 connect_to_sheet 함수를 지우고 이걸로 덮어쓰세요!
 def connect_to_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
-    # [수정된 부분] 파일이 아니라, Streamlit의 비밀 금고(Secrets)에서 정보를 가져옵니다.
     try:
-        # 1. 스트림릿 클라우드에 저장된 비밀정보(gcp_service_account)를 사용
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     except:
-        # (혹시 로컬에서 실행할 때를 대비해 기존 방식도 남겨둠)
         creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
-        
     client = gspread.authorize(creds)
     return client.open("Safety_Project").sheet1
 
-# [함수 추가] 공지사항 읽어오기 (E2 셀)
 def get_notice():
     try:
         sheet = connect_to_sheet()
-        # 2행 5열(E2) 값을 가져옵니다.
         notice = sheet.cell(2, 5).value 
         return notice if notice else "등록된 공지사항이 없습니다."
     except:
-        return "공지사항을 불러올 수 없습니다."
+        return "공지사항 없음 (E2셀 확인필요)"
 
-# [함수 추가] 공지사항 수정하기 (E2 셀)
 def update_notice(new_text):
     try:
         sheet = connect_to_sheet()
-        sheet.update_cell(2, 5, new_text) # 2행 5열(E2)에 덮어쓰기
+        sheet.update_cell(2, 5, new_text)
         return True
     except:
         return False
@@ -58,13 +49,11 @@ def update_sheet_any(task_name, target_col, new_value):
         sheet = connect_to_sheet()
         cell = sheet.find(task_name)
         col_map = {"상태": 3, "비고": 4, "세부내용": 2}
-        target_col_idx = col_map.get(target_col)
-        
-        if target_col_idx:
-            sheet.update_cell(cell.row, target_col_idx, new_value)
+        idx = col_map.get(target_col)
+        if idx:
+            sheet.update_cell(cell.row, idx, new_value)
             return True
-        else:
-            return False
+        return False
     except:
         return False
 
@@ -77,145 +66,133 @@ def add_new_task(task_name):
         return False
 
 def delete_task(task_name):
-    """★ [신규 기능] 작업을 시트에서 삭제하는 함수"""
     try:
         sheet = connect_to_sheet()
         cell = sheet.find(task_name)
-        sheet.delete_rows(cell.row) # 해당 줄을 아예 삭제
+        sheet.delete_rows(cell.row)
         return True
     except:
         return False
 
 # ----------------------------------------------------------
-# 3. 화면 구성
+# 2. 데이터 불러오기
 # ----------------------------------------------------------
-st.title("🤖 든든한 프로젝트 매니저")
-
-# 데이터 및 공지사항 불러오기
 try:
     sheet = connect_to_sheet()
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
+    current_notice = get_notice()
     
-    # ★ 여기서 공지사항을 가져옵니다!
-    current_notice = get_notice() 
+    # 지표 계산
+    total = len(df)
+    done = len(df[df['상태'] == '완료']) if not df.empty else 0
+    pending = len(df[df['상태'] == '대기']) if not df.empty else 0
     
 except:
-    st.error("시트 연결 대기중...")
+    st.error("⚠️ 시트 연결 실패! 구글 시트 제목줄(1행)과 공지사항(E1,E2)을 확인하세요.")
     df = pd.DataFrame()
-    current_notice = "로딩 중..."
+    current_notice = "-"
+    total, done, pending = 0, 0, 0
 
-# --- UI 레이아웃 ---
+# ----------------------------------------------------------
+# 3. 화면 구성 (UI)
+# ----------------------------------------------------------
+st.title("🤖 든든한 프로젝트 매니저")
+
 with st.sidebar:
-    st.header("⚙️ 화면 설정")
-    is_mobile = st.checkbox("📱 모바일 모드", value=False)
+    st.header("⚙️ 설정")
+    is_mobile = st.checkbox("📱 모바일 모드 (탭 보기)", value=False)
+    st.divider()
+    st.metric("📌 전체 작업", f"{total}개")
+    st.metric("✅ 완료", f"{done}개")
+    st.metric("⏳ 대기", f"{pending}개")
 
-# 레이아웃 나누기
+# ★ 레이아웃 분기점
 if is_mobile:
-    container_chat, container_sheet = st.tabs(["💬 채팅 비서", "📊 프로젝트 시트"])
+    tab1, tab2 = st.tabs(["💬 채팅 비서", "📊 프로젝트 시트"])
+    container_chat = tab1
+    container_sheet = tab2
 else:
     col1, col2 = st.columns([1, 1.2])
     container_chat = col1
     container_sheet = col2
 
-# [공통] 채팅창 맨 위에 공지사항 띄우기!
-with container_chat:
-    # 📢 공지사항을 예쁜 박스로 보여줍니다.
-    st.info(f"📢 **공지사항:** {current_notice}")
+# [오른쪽/탭2] 시트 화면
+with container_sheet:
+    st.subheader("📊 실시간 리스트")
+    if not df.empty:
+        st.dataframe(df, use_container_width=True, height=500)
+    else:
+        st.info("표시할 데이터가 없습니다.")
 
-    # ... (기존 채팅 UI 코드들) ...
-    st.subheader("💬 AI 작업 비서")
-    chat_container = st.container(height=400 if is_mobile else 600, border=True)
-    
+# [왼쪽/탭1] 채팅 화면
+with container_chat:
+    if current_notice != "-":
+        st.info(f"📢 **공지:** {current_notice}")
+        
+    st.subheader("💬 AI 비서")
+    chat_container = st.container(height=500, border=True)
+
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
     with chat_container:
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.write(message["content"])
+        for msg in st.session_state.messages:
+            st.chat_message(msg["role"]).write(msg["content"])
 
-    prompt = st.chat_input("명령을 입력하세요...")
-
-    if prompt:
+    if prompt := st.chat_input("명령을 입력하세요..."):
         with chat_container:
-            with st.chat_message("user"):
-                st.write(prompt)
+            st.chat_message("user").write(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # --- AI 프롬프트 (공지사항 변경 규칙 추가!) ---
-        current_data_context = df.to_csv(index=False) if not df.empty else "데이터 없음"
-
+        # AI 로직
+        data_context = df.to_csv(index=False) if not df.empty else "데이터 없음"
         system_prompt = f"""
-        너는 프로젝트 매니저야.
-        [현재 시트 데이터] {current_data_context}
-        
-        [명령 규칙]
-        1. 공지사항 변경 명령: {{"action": "notice", "value": "새로운공지내용"}}
-           - 예: "공지사항을 '내일 휴강'으로 바꿔줘"
-           
-        2. 작업 추가/수정/삭제:
-           - 수정: {{"action": "update", "task": "작업명", "target": "상태/비고/세부내용", "value": "변경내용"}}
-           - 추가: {{"action": "add", "task": "작업명"}}
-           - 삭제: {{"action": "delete", "task": "작업명"}}
-           
-        3. 그 외 질문은 자연스러운 한국어로 답변.
+        너는 매니저야. 데이터: {data_context}
+        규칙:
+        1. 공지변경: {{"action": "notice", "value": "내용"}}
+        2. 수정: {{"action": "update", "task": "이름", "target": "상태/비고/세부내용", "value": "값"}}
+        3. 추가: {{"action": "add", "task": "이름"}}
+        4. 삭제: {{"action": "delete", "task": "이름"}}
+        그 외는 자연어 답변.
         """
         
-        full_prompt = system_prompt + "\n사용자: " + prompt
-        
         try:
-            response = model.generate_content(full_prompt)
-            ai_text = response.text.strip()
+            res = model.generate_content(system_prompt + "\n사용자: " + prompt)
+            text = res.text.strip()
+            # (JSON 파싱 로직 간소화)
+            json_objs = re.findall(r'\{.*?\}', text.replace("```json","").replace("```",""), re.DOTALL)
             
-            clean_text = ai_text.replace("```json", "").replace("```", "").strip()
-            json_objects = re.findall(r'\{.*?\}', clean_text, re.DOTALL)
-            
-            processed_count = 0
-            
-            if json_objects:
-                for json_str in json_objects:
+            processed = False
+            if json_objs:
+                for j in json_objs:
                     try:
-                        command = json.loads(json_str)
-                        
-                        # ★ [새로운 기능] 공지사항 변경
-                        if command.get("action") == "notice":
-                            if update_notice(command['value']):
-                                st.success(f"📢 공지사항이 **'{command['value']}'**(으)로 변경되었습니다!")
-                                st.session_state.messages.append({"role": "assistant", "content": f"📢 공지사항 변경 완료: {command['value']}"})
-                                processed_count += 1
-                        
-                        # (기존 기능들은 그대로 둠)
-                        elif command.get("action") == "update":
-                            if update_sheet_any(command['task'], command['target'], command['value']):
-                                result_msg = f"✅ **'{command['task']}'** 수정 완료!"
-                                st.session_state.messages.append({"role": "assistant", "content": result_msg})
-                                processed_count += 1
-                        elif command.get("action") == "add":
-                            if add_new_task(command['task']):
-                                result_msg = f"🆕 **'{command['task']}'** 추가 완료!"
-                                st.session_state.messages.append({"role": "assistant", "content": result_msg})
-                                processed_count += 1
-                        elif command.get("action") == "delete":
-                            if delete_task(command['task']):
-                                result_msg = f"🗑️ **'{command['task']}'** 삭제 완료."
-                                st.session_state.messages.append({"role": "assistant", "content": result_msg})
-                                processed_count += 1
-                                
-                    except:
-                        continue 
-
-                if processed_count > 0:
-                    st.rerun() # 새로고침해야 바뀐 공지사항이 바로 보입니다!
-                else:
-                     # 실행 실패 시 등
-                     with chat_container:
-                        st.write(ai_text)
-                     st.session_state.messages.append({"role": "assistant", "content": ai_text})
+                        cmd = json.loads(j)
+                        act = cmd.get("action")
+                        if act == "notice":
+                            if update_notice(cmd['value']):
+                                st.success(f"공지 변경: {cmd['value']}")
+                                st.session_state.messages.append({"role": "assistant", "content": f"공지 변경 완료: {cmd['value']}"})
+                                processed = True
+                        elif act == "update":
+                            if update_sheet_any(cmd['task'], cmd['target'], cmd['value']):
+                                st.session_state.messages.append({"role": "assistant", "content": f"✅ {cmd['task']} 수정 완료"})
+                                processed = True
+                        elif act == "add":
+                            if add_new_task(cmd['task']):
+                                st.session_state.messages.append({"role": "assistant", "content": f"🆕 {cmd['task']} 추가 완료"})
+                                processed = True
+                        elif act == "delete":
+                            if delete_task(cmd['task']):
+                                st.session_state.messages.append({"role": "assistant", "content": f"🗑️ {cmd['task']} 삭제 완료"})
+                                processed = True
+                    except: pass
+            
+            if processed:
+                st.rerun()
             else:
-                with chat_container:
-                    st.write(ai_text)
-                st.session_state.messages.append({"role": "assistant", "content": ai_text})
+                with chat_container: st.chat_message("assistant").write(text)
+                st.session_state.messages.append({"role": "assistant", "content": text})
                 
         except Exception as e:
             st.error(f"에러: {e}")
