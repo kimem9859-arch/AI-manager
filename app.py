@@ -16,7 +16,7 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("API 키가 아직 설정되지 않았습니다. Streamlit 설정을 확인해주세요.")
 
-model = genai.GenerativeModel('gemini-2.5-pro')
+model = genai.GenerativeModel('gemini-2.5-')
 
 # 기존의 connect_to_sheet 함수를 지우고 이걸로 덮어쓰세요!
 def connect_to_sheet():
@@ -105,7 +105,9 @@ with col2:
     if not df.empty:
         st.dataframe(df, use_container_width=True, height=500)
 
-# [왼쪽] 채팅창
+# ----------------------------------------------------------
+# [왼쪽] 채팅창 (여기서부터 끝까지 복사해서 덮어쓰세요!)
+# ----------------------------------------------------------
 with col1:
     st.subheader("💬 AI 작업 비서")
     chat_container = st.container(height=500, border=True)
@@ -118,7 +120,7 @@ with col1:
             with st.chat_message(message["role"]):
                 st.write(message["content"])
 
-    prompt = st.chat_input("명령을 입력하세요... (예: 라즈베리파이 작업 삭제해줘)")
+    prompt = st.chat_input("명령을 입력하세요... (예: 진행 상황 요약해줘)")
 
     if prompt:
         with chat_container:
@@ -126,21 +128,24 @@ with col1:
                 st.write(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # --- AI 프롬프트 (삭제 기능 교육 추가) ---
+        # ★★★ [업그레이드된 프롬프트] ★★★
+        # AI에게 현재 시트의 모든 정보를 줍니다.
+        current_data_context = df.to_csv(index=False) if not df.empty else "데이터 없음"
+
         system_prompt = f"""
-        너는 프로젝트 매니저야. 현재 작업 목록: {task_list}
+        너는 유능한 프로젝트 매니저야.
         
-        사용자의 명령을 분석해서 반드시 아래 JSON 형식으로 답해.
+        [현재 시트 데이터]
+        {current_data_context}
         
-        1. [수정] {{"action": "update", "task": "작업명", "target": "상태/비고/세부내용", "value": "변경할내용"}}
-        2. [추가] {{"action": "add", "task": "새로운작업명"}}
-        3. [삭제] {{"action": "delete", "task": "삭제할작업명"}}
-        
-        [규칙]
-        - '지워줘', '삭제해줘', '없애줘'는 delete 명령이야.
-        - target은 '상태', '비고', '세부내용' 중 하나.
-        
-        사족 금지. 오직 JSON만 출력해.
+        [수행 규칙]
+        1. 사용자가 **'추가', '수정', '삭제'** 같은 명확한 명령을 내리면 반드시 아래 JSON 형식으로만 답해.
+           - 수정: {{"action": "update", "task": "작업명", "target": "상태/비고/세부내용", "value": "변경할내용"}}
+           - 추가: {{"action": "add", "task": "새로운작업명"}}
+           - 삭제: {{"action": "delete", "task": "삭제할작업명"}}
+           
+        2. 사용자가 **'요약', '브리핑', '질문'**을 하면 JSON을 쓰지 말고, 위 [현재 시트 데이터]를 분석해서 자연스러운 한국어로 답변해.
+           - 예: "현재 완료된 작업은 2개이고, 급한 건 000입니다."
         """
         
         full_prompt = system_prompt + "\n사용자: " + prompt
@@ -149,34 +154,33 @@ with col1:
             response = model.generate_content(full_prompt)
             ai_text = response.text.strip()
             
+            # JSON이 있는지 검사 (명령어인지 확인)
             clean_text = ai_text.replace("```json", "").replace("```", "").strip()
             json_objects = re.findall(r'\{.*?\}', clean_text, re.DOTALL)
             
             processed_count = 0
             
+            # 1. JSON 명령어가 발견되면 실행 (기존 로직)
             if json_objects:
                 for json_str in json_objects:
                     try:
                         command = json.loads(json_str)
                         
-                        # 1. 수정
                         if command.get("action") == "update":
                             if update_sheet_any(command['task'], command['target'], command['value']):
                                 result_msg = f"✅ **'{command['task']}'**의 **{command['target']}** ➔ **'{command['value']}'** 변경!"
                                 st.session_state.messages.append({"role": "assistant", "content": result_msg})
                                 processed_count += 1
                         
-                        # 2. 추가
                         elif command.get("action") == "add":
                             if add_new_task(command['task']):
                                 result_msg = f"🆕 **'{command['task']}'** 추가 완료!"
                                 st.session_state.messages.append({"role": "assistant", "content": result_msg})
                                 processed_count += 1
 
-                        # 3. ★ 삭제 (NEW!)
                         elif command.get("action") == "delete":
                             if delete_task(command['task']):
-                                result_msg = f"🗑️ **'{command['task']}'** 작업을 삭제했습니다."
+                                result_msg = f"🗑️ **'{command['task']}'** 삭제 완료."
                                 st.session_state.messages.append({"role": "assistant", "content": result_msg})
                                 processed_count += 1
                                 
@@ -186,8 +190,13 @@ with col1:
                 if processed_count > 0:
                     st.rerun()
                 else:
-                    with chat_container:
-                        st.warning("명령을 실행하지 못했어요. 작업명을 정확히 확인해주세요.")
+                    # JSON은 있었지만 실행 실패 시 (혹은 AI가 텍스트랑 JSON을 섞어 썼을 때 텍스트 보여주기)
+                     with chat_container:
+                        with st.chat_message("assistant"):
+                            st.write(ai_text)
+                     st.session_state.messages.append({"role": "assistant", "content": ai_text})
+
+            # 2. JSON이 없으면 그냥 일반 대화로 처리 (브리핑 기능 활성화!)
             else:
                 with chat_container:
                     with st.chat_message("assistant"):
@@ -195,5 +204,4 @@ with col1:
                 st.session_state.messages.append({"role": "assistant", "content": ai_text})
                 
         except Exception as e:
-
             st.error(f"에러 발생: {e}")
