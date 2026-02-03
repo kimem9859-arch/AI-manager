@@ -5,21 +5,51 @@ from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import json
 import re 
+import time
 
 # ----------------------------------------------------------
 # 1. 초기 설정 & 함수
 # ----------------------------------------------------------
 st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖", layout="wide")
 
+# ★ [신규 기능] 사용 설명서 팝업 함수
+@st.dialog("📖 사용 설명서")
+def show_guide():
+    st.markdown("""
+    ### 👋 환영합니다! AI 프로젝트 매니저입니다.
+    이곳은 **라즈베리파이 AI 비전 프로젝트**를 관리하는 공간입니다.
+    
+    #### 1. 🤖 AI 비서에게 말 걸기 (왼쪽/채팅탭)
+    자연어로 명령하면 시트에 자동으로 반영됩니다.
+    * **추가:** "라즈베리파이 쿨링팬 구매 작업 추가해줘"
+    * **수정:** "쿨링팬 구매 완료로 바꿔줘"
+    * **삭제:** "쿨링팬 작업 삭제해줘"
+    * **공지:** "공지사항을 '다음 주 중간 발표'로 변경해줘"
+    
+    #### 2. 📊 실시간 현황판 (오른쪽/시트탭)
+    * 구글 시트('작업' 탭)와 실시간으로 연동됩니다.
+    * 전체 진행률과 대기 중인 작업을 한눈에 볼 수 있습니다.
+    
+    #### 3. 📱 모바일 모드
+    * 핸드폰으로 접속하셨나요?
+    * 왼쪽 사이드바(>)에서 **'모바일 모드'**를 체크하세요.
+    * 화면이 탭(Tab) 방식으로 바뀌어 보기 편해집니다.
+    """)
+    if st.button("네, 알겠습니다! (닫기)"):
+        st.rerun()
+
+# 세션 상태 초기화 (처음 접속인지 확인)
+if "first_visit" not in st.session_state:
+    st.session_state.first_visit = True
+
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
     st.error("API 키가 설정되지 않았습니다.")
 
-# ★ 모델 설정 (사용자 지정)
+# ★ 모델 설정
 model = genai.GenerativeModel('gemini-2.5-pro')
 
-# [기본] 스프레드시트 파일 열기
 def get_spreadsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
@@ -28,26 +58,20 @@ def get_spreadsheet():
     except:
         creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
     client = gspread.authorize(creds)
-    # 스프레드시트 파일 이름이 "Safety_Project"가 맞는지 확인하세요!
     return client.open("Safety_Project")
 
-# [수정됨] ★ '작업'이라는 이름의 시트를 콕 집어서 가져오기
 def connect_to_task_sheet():
     sh = get_spreadsheet()
     try:
-        # 1순위: '작업'이라는 시트 찾기
         return sh.worksheet("작업")
     except:
-        # 만약 '작업' 시트가 없으면 -> 첫 번째 시트라도 가져오기 (비상용)
         return sh.sheet1 
 
-# [수정됨] ★ '공지'라는 이름의 시트 가져오기
 def connect_to_notice_sheet():
     sh = get_spreadsheet()
     try:
         return sh.worksheet("공지")
     except:
-        # 없으면 자동 생성
         new_sheet = sh.add_worksheet(title="공지", rows="10", cols="2")
         new_sheet.update_cell(1, 1, "공지사항 없음")
         return new_sheet
@@ -72,7 +96,7 @@ def update_sheet_any(task_name, target_col, new_value):
     try:
         sheet = connect_to_task_sheet()
         cell = sheet.find(task_name)
-        col_map = {"상태": 3, "비고": 4, "세부내용": 2} # 열 번호 확인 필요 (상태가 C열이면 3)
+        col_map = {"상태": 3, "비고": 4, "세부내용": 2}
         idx = col_map.get(target_col)
         if idx:
             sheet.update_cell(cell.row, idx, new_value)
@@ -84,7 +108,6 @@ def update_sheet_any(task_name, target_col, new_value):
 def add_new_task(task_name):
     try:
         sheet = connect_to_task_sheet()
-        # 새 작업 추가 시 기본값
         sheet.append_row([task_name, "설정필요", "대기", "-"]) 
         return True
     except:
@@ -100,36 +123,42 @@ def delete_task(task_name):
         return False
 
 # ----------------------------------------------------------
-# 2. 데이터 불러오기
+# 2. 화면 구성 & 팝업 실행
 # ----------------------------------------------------------
+
+# ★ [핵심] 접속하자마자 팝업 띄우기 (맨 처음에만)
+if st.session_state.first_visit:
+    show_guide()
+    st.session_state.first_visit = False
+
 try:
     task_sheet = connect_to_task_sheet()
     data = task_sheet.get_all_records()
     df = pd.DataFrame(data)
     current_notice = get_notice()
     
-    # 지표 계산
     total = len(df)
     done = len(df[df['상태'] == '완료']) if not df.empty else 0
     pending = len(df[df['상태'] == '대기']) if not df.empty else 0
     
 except:
-    # 에러 발생 시 화면에 표시
-    st.error("⚠️ 시트 연결 오류! 시트 이름이 '작업'인지, 제목 줄(1행)이 있는지 확인하세요.")
+    st.error("⚠️ 시트 연결 오류! 시트 이름('작업')과 헤더를 확인하세요.")
     df = pd.DataFrame()
     current_notice = "연결 실패"
     total, done, pending = 0, 0, 0
 
-# ----------------------------------------------------------
-# 3. 화면 구성 (UI)
-# ----------------------------------------------------------
 st.title("🤖 든든한 프로젝트 매니저")
 
 with st.sidebar:
     st.header("⚙️ 설정")
     is_mobile = st.checkbox("📱 모바일 모드 (탭 보기)", value=False)
+    
+    st.divider()
+    # ★ [신규] 언제든 다시 볼 수 있는 버튼
+    if st.button("❓ 사용법 다시 보기"):
+        show_guide()
 
-# 모바일 최적화 통계 (가로 배치)
+# 모바일 최적화 통계
 st.markdown(f"""
     <div style="
         display: flex; 
@@ -165,15 +194,13 @@ else:
     container_chat = col1
     container_sheet = col2
 
-# [오른쪽/탭2] 시트 화면
 with container_sheet:
     st.subheader("📊 실시간 리스트")
     if not df.empty:
         st.dataframe(df, use_container_width=True, height=400 if is_mobile else 600)
     else:
-        st.info("데이터가 없습니다. (시트 이름을 '작업'으로 바꿨는지 확인해주세요!)")
+        st.info("데이터가 없습니다.")
 
-# [왼쪽/탭1] 채팅 화면
 with container_chat:
     if current_notice != "-" and current_notice != "공지사항 없음":
         st.info(f"📢 **공지:** {current_notice}")
@@ -190,7 +217,6 @@ with container_chat:
         for msg in st.session_state.messages:
             st.chat_message(msg["role"]).write(msg["content"])
 
-# 입력창 하단 고정
 prompt = st.chat_input("명령을 입력하세요...")
 
 if prompt:
