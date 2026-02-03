@@ -1,0 +1,8 @@
+# 비밀 파일은 무시해!
+.streamlit/secrets.toml
+secrets.toml
+
+# (선택) 지저분한 폴더들도 무시해
+__pycache__/
+
+service_account.json
