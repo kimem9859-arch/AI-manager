@@ -16,6 +16,8 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("API 키가 아직 설정되지 않았습니다. Streamlit 설정을 확인해주세요.")
 
+model = genai.GenerativeModel('gemini-2.5-pro')
+
 # 기존의 connect_to_sheet 함수를 지우고 이걸로 덮어쓰세요!
 def connect_to_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
