@@ -12,7 +12,7 @@ import time
 # ----------------------------------------------------------
 st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖", layout="wide")
 
-# 세션 상태 초기화 (사용 설명서 팝업용)
+# 세션 상태 초기화
 if "first_visit" not in st.session_state:
     st.session_state.first_visit = True
 
@@ -21,10 +21,10 @@ if "first_visit" not in st.session_state:
 def show_guide():
     st.markdown("""
     ### 👋 환영합니다!
-    **1. 💬 채팅 비서:** 작업 추가/수정 및 물품 검색 가능
-    **2. 📊 프로젝트 시트:** 할 일 목록 관리
-    **3. 📦 물품 리스트:** 엑셀로 정리한 물품 현황 확인
-    **4. 📱 모바일 모드:** 사이드바에서 설정 가능
+    **1. 💬 채팅 비서:** 작업 관리 & 물품 검색
+    **2. 📊 작업 리스트:** 할 일 목록 ('작업' 시트)
+    **3. 📦 물품 리스트:** 구매 목록 ('물품' 시트)
+    **4. 📱 모바일 모드:** 사이드바 설정
     """)
     if st.button("닫기"):
         st.rerun()
@@ -34,9 +34,9 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("API 키 설정 필요")
 
+# ★ 모델 설정 (gemini-2.5-pro 고정)
 model = genai.GenerativeModel('gemini-2.5-pro')
 
-# [기본] 스프레드시트 연결
 def get_spreadsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
@@ -47,31 +47,34 @@ def get_spreadsheet():
     client = gspread.authorize(creds)
     return client.open("Safety_Project")
 
-# 1. 작업 목록 시트
+# 1. 작업 시트 연결
 def connect_to_task_sheet():
     sh = get_spreadsheet()
     try: return sh.worksheet("작업")
     except: return sh.sheet1 
 
-# 2. 공지 시트
+# 2. 공지 시트 연결
 def connect_to_notice_sheet():
     sh = get_spreadsheet()
     try: return sh.worksheet("공지")
     except:
+        # 없으면 자동 생성
         new = sh.add_worksheet("공지", 10, 2)
         new.update_cell(1,1,"공지없음")
         return new
 
-# 3. ★ [신규] 물품 리스트 시트 연결
+# 3. ★ [수정됨] 물품 시트 연결 (자동 생성 기능 추가!)
 def connect_to_item_sheet():
     sh = get_spreadsheet()
     try:
-        # 구글 시트에 '물품'이라는 탭이 있어야 합니다!
         return sh.worksheet("물품")
     except:
-        return None # 물품 시트가 없으면 없는 대로 처리
+        # ★ 물품 시트가 없으면 자동으로 만들어줍니다!
+        new_sheet = sh.add_worksheet(title="물품", rows="100", cols="6")
+        # 헷갈리지 않게 첫 줄에 예시 제목도 넣어줍니다.
+        new_sheet.append_row(["품목명", "수량", "가격", "구매처", "링크", "비고"])
+        return new_sheet
 
-# 공지 읽기/쓰기 함수들
 def get_notice():
     try:
         sh = connect_to_notice_sheet()
@@ -128,25 +131,23 @@ except:
     df = pd.DataFrame()
     total, done, pending = 0,0,0
 
-# (2) 물품 데이터 (엑셀 파일 내용)
+# (2) 물품 데이터
 try:
     item_sheet = connect_to_item_sheet()
-    if item_sheet:
-        item_data = item_sheet.get_all_records()
-        df_items = pd.DataFrame(item_data)
-        # ★ 엑셀 호환성 처리: 빈칸(병합된 셀의 뒷부분)을 앞의 값으로 채움
-        # (예: '센서류' 카테고리가 병합되어 있으면, 아래 칸들도 '센서류'로 인식하게 함)
+    # 시트가 방금 만들어져서 비어있을 수 있으므로 예외 처리
+    item_data = item_sheet.get_all_records()
+    df_items = pd.DataFrame(item_data)
+    if not df_items.empty:
+        # 빈칸 채우기 (병합된 셀 대응)
         df_items = df_items.replace("", pd.NA).ffill()
-        df_items = df_items.fillna("-") # 그래도 빈칸은 - 처리
-    else:
-        df_items = pd.DataFrame()
+        df_items = df_items.fillna("-")
 except:
     df_items = pd.DataFrame()
 
 current_notice = get_notice()
 
 # ----------------------------------------------------------
-# 3. 화면 구성 (UI)
+# 3. 화면 구성
 # ----------------------------------------------------------
 st.title("🤖 든든한 프로젝트 매니저")
 
@@ -154,10 +155,9 @@ with st.sidebar:
     st.header("⚙️ 설정")
     is_mobile = st.checkbox("📱 모바일 모드", value=False)
     if st.button("❓ 도움말"): show_guide()
-    # ★ 원본 엑셀 보러가기 링크 (자신의 구글시트 주소로 바꾸세요)
-    st.link_button("📂 원본 엑셀(구글시트) 열기", "https://docs.google.com/spreadsheets/")
+    st.link_button("📂 구글시트 바로가기", "https://docs.google.com/spreadsheets/")
 
-# 통계 (모바일/PC 공통)
+# 통계 UI
 st.markdown(f"""
     <div style="display:flex; justify-content:space-around; background-color:rgba(255,255,255,0.1); padding:10px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.2);">
         <div style="text-align:center;"><p style="margin:0; font-size:14px; opacity:0.8;">📌 전체</p><p style="margin:0; font-size:20px; font-weight:bold;">{total}</p></div>
@@ -166,12 +166,11 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 탭 구성 (물품 리스트 추가!)
+# 탭 구성
 if is_mobile:
     tab1, tab2, tab3 = st.tabs(["💬 채팅", "📊 작업", "📦 물품"])
     c_chat, c_sheet, c_items = tab1, tab2, tab3
 else:
-    # PC에서는 2단 분리 (채팅 / 시트+물품)
     col1, col2 = st.columns([1, 1.2])
     c_chat = col1
     with col2:
@@ -179,21 +178,20 @@ else:
         c_sheet = sub_tab1
         c_items = sub_tab2
 
-# [탭 2] 작업 리스트
+# [탭 2] 작업
 with c_sheet:
     if not df.empty:
         st.dataframe(df, use_container_width=True, height=500)
-    else: st.info("작업 데이터 없음")
+    else: st.info("작업 데이터가 없습니다.")
 
-# [탭 3] ★ 물품 리스트 (엑셀 데이터)
+# [탭 3] 물품
 with c_items:
     if not df_items.empty:
-        st.info("💡 엑셀의 색상/병합은 제외하고 '데이터'만 보여줍니다.")
         st.dataframe(df_items, use_container_width=True, height=500)
     else:
-        st.warning("⚠️ '물품' 시트를 찾지 못했습니다. 구글 시트에 '물품' 탭을 만들고 데이터를 넣어주세요!")
+        st.info("📦 물품 리스트가 비어있습니다. 구글 시트의 '물품' 탭에 엑셀 내용을 붙여넣어 주세요!")
 
-# [탭 1] 채팅 비서
+# [탭 1] 채팅
 with c_chat:
     if current_notice not in ["-", "공지없음"]:
         st.info(f"📢 **공지:** {current_notice}")
@@ -210,43 +208,14 @@ if prompt:
     with chat_con: st.chat_message("user").write(prompt)
     st.session_state.messages.append({"role":"user", "content":prompt})
 
-    # AI에게 물품 데이터도 같이 줌!
     csv_task = df.to_csv(index=False) if not df.empty else "없음"
     csv_item = df_items.to_csv(index=False) if not df_items.empty else "없음"
     
     sys_prompt = f"""
     너는 프로젝트 매니저야.
     [작업 목록]: {csv_task}
-    [물품 목록(엑셀)]: {csv_item}
+    [물품 목록]: {csv_item}
     
     규칙:
     1. 공지변경: {{"action":"notice", "value":"내용"}}
-    2. 작업변경: {{"action":"update", "task":"이름", "target":"상태/비고/세부내용", "value":"값"}}
-    3. 작업추가: {{"action":"add", "task":"이름"}}
-    4. 작업삭제: {{"action":"delete", "task":"이름"}}
-    
-    * 사용자가 "물품"에 대해 물어보면 [물품 목록] 데이터를 보고 대답해. (예: 가격, 수량 등)
-    """
-    
-    try:
-        res = model.generate_content(sys_prompt + "\nUser:" + prompt)
-        txt = res.text.strip()
-        jsons = re.findall(r'\{.*?\}', txt.replace("```json","").replace("```",""), re.DOTALL)
-        
-        processed = False
-        if jsons:
-            for j in jsons:
-                try:
-                    cmd = json.loads(j)
-                    act = cmd.get("action")
-                    if act=="notice": update_notice(cmd['value']); processed=True
-                    elif act=="update": update_sheet_any(cmd['task'], cmd['target'], cmd['value']); processed=True
-                    elif act=="add": add_new_task(cmd['task']); processed=True
-                    elif act=="delete": delete_task(cmd['task']); processed=True
-                except: pass
-        
-        if processed: st.rerun()
-        else:
-            with chat_con: st.chat_message("assistant").write(txt)
-            st.session_state.messages.append({"role":"assistant", "content":txt})
-    except Exception as e: st.error(f"Error: {e}")
+    2. 작업변경: {{"action":"update", "task":"이름", "target":"상태
