@@ -16,10 +16,11 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("API 키가 설정되지 않았습니다.")
 
-# ★ 모델 설정 (gemini-2.5-pro 유지)
+# ★ 모델 설정
 model = genai.GenerativeModel('gemini-2.5-pro')
 
-def connect_to_sheet():
+# [기본] 구글 시트 연결 (메인 스프레드시트 자체를 가져옴)
+def get_spreadsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
@@ -27,27 +28,46 @@ def connect_to_sheet():
     except:
         creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
     client = gspread.authorize(creds)
-    return client.open("Safety_Project").sheet1
+    return client.open("Safety_Project")
 
+# [함수 1] 작업 리스트 가져오기 (첫 번째 시트 사용)
+def connect_to_task_sheet():
+    sh = get_spreadsheet()
+    return sh.sheet1 
+
+# [함수 2] ★ 공지사항 전용 시트 연결 ('공지' 라는 이름의 탭 사용)
+def connect_to_notice_sheet():
+    sh = get_spreadsheet()
+    try:
+        # '공지'라는 이름의 탭을 찾습니다.
+        return sh.worksheet("공지")
+    except:
+        # 없으면 자동으로 만들어줍니다! (센스쟁이 기능)
+        new_sheet = sh.add_worksheet(title="공지", rows="10", cols="2")
+        new_sheet.update_cell(1, 1, "공지사항 없음")
+        return new_sheet
+
+# 공지사항 읽기 (공지 시트 A1 셀)
 def get_notice():
     try:
-        sheet = connect_to_sheet()
-        notice = sheet.cell(2, 5).value 
-        return notice if notice else "등록된 공지사항이 없습니다."
+        sheet = connect_to_notice_sheet()
+        notice = sheet.cell(1, 1).value 
+        return notice if notice else "공지사항 없음"
     except:
-        return "공지사항 없음 (E2셀 확인필요)"
+        return "공지 로딩 실패"
 
+# 공지사항 쓰기 (공지 시트 A1 셀)
 def update_notice(new_text):
     try:
-        sheet = connect_to_sheet()
-        sheet.update_cell(2, 5, new_text)
+        sheet = connect_to_notice_sheet()
+        sheet.update_cell(1, 1, new_text)
         return True
     except:
         return False
 
 def update_sheet_any(task_name, target_col, new_value):
     try:
-        sheet = connect_to_sheet()
+        sheet = connect_to_task_sheet()
         cell = sheet.find(task_name)
         col_map = {"상태": 3, "비고": 4, "세부내용": 2}
         idx = col_map.get(target_col)
@@ -60,7 +80,7 @@ def update_sheet_any(task_name, target_col, new_value):
 
 def add_new_task(task_name):
     try:
-        sheet = connect_to_sheet()
+        sheet = connect_to_task_sheet()
         sheet.append_row([task_name, "설정필요", "대기", "-"])
         return True
     except:
@@ -68,7 +88,7 @@ def add_new_task(task_name):
 
 def delete_task(task_name):
     try:
-        sheet = connect_to_sheet()
+        sheet = connect_to_task_sheet()
         cell = sheet.find(task_name)
         sheet.delete_rows(cell.row)
         return True
@@ -79,8 +99,8 @@ def delete_task(task_name):
 # 2. 데이터 불러오기
 # ----------------------------------------------------------
 try:
-    sheet = connect_to_sheet()
-    data = sheet.get_all_records()
+    task_sheet = connect_to_task_sheet()
+    data = task_sheet.get_all_records()
     df = pd.DataFrame(data)
     current_notice = get_notice()
     
@@ -104,8 +124,7 @@ with st.sidebar:
     st.header("⚙️ 설정")
     is_mobile = st.checkbox("📱 모바일 모드 (탭 보기)", value=False)
 
-# ★★★ [개선 1] 모바일 최적화 통계 (커스텀 HTML) ★★★
-# st.metric 대신 HTML로 직접 그려서 강제로 가로 배치하고 글씨를 줄입니다.
+# [개선 1] 모바일 최적화 통계 (커스텀 HTML)
 st.markdown(f"""
     <div style="
         display: flex; 
@@ -145,7 +164,6 @@ else:
 with container_sheet:
     st.subheader("📊 실시간 리스트")
     if not df.empty:
-        # 모바일에선 표를 조금 더 작게 보여줌
         st.dataframe(df, use_container_width=True, height=400 if is_mobile else 600)
     else:
         st.info("데이터 없음")
@@ -157,7 +175,7 @@ with container_chat:
         
     st.subheader("💬 AI 비서")
     
-    # 채팅 내역 박스 (높이 조절)
+    # 채팅 내역 박스
     chat_box_height = 400 if is_mobile else 550
     chat_container = st.container(height=chat_box_height, border=True)
 
@@ -168,17 +186,15 @@ with container_chat:
         for msg in st.session_state.messages:
             st.chat_message(msg["role"]).write(msg["content"])
 
-# ★★★ [개선 2] 입력창 하단 고정 ★★★
-# with 문 밖으로 빼내어 화면 전체의 맨 아래에 고정시킵니다.
-prompt = st.chat_input("명령을 입력하세요... (예: 라즈베리파이 구매 완료)")
+# [개선 2] 입력창 하단 고정
+prompt = st.chat_input("명령을 입력하세요...")
 
 if prompt:
-    # 1. 사용자 메시지 표시 (채팅 박스 안에)
     with chat_container:
         st.chat_message("user").write(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # 2. AI 로직 처리
+    # AI 로직
     data_context = df.to_csv(index=False) if not df.empty else "데이터 없음"
     system_prompt = f"""
     너는 매니저야. 데이터: {data_context}
@@ -222,7 +238,6 @@ if prompt:
         if processed:
             st.rerun()
         else:
-            # AI 답변 표시 (채팅 박스 안에)
             with chat_container: 
                 st.chat_message("assistant").write(text)
             st.session_state.messages.append({"role": "assistant", "content": text})
