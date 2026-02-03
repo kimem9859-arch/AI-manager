@@ -16,6 +16,7 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("API 키가 설정되지 않았습니다.")
 
+# ★ 모델 설정 (필요하면 여기를 'gemini-2.5-pro' 등으로 수정하세요)
 model = genai.GenerativeModel('gemini-2.5-pro')
 
 def connect_to_sheet():
@@ -99,15 +100,20 @@ except:
 # ----------------------------------------------------------
 st.title("🤖 든든한 프로젝트 매니저")
 
+# [수정됨] 사이드바에는 '설정'만 남겨둠
 with st.sidebar:
     st.header("⚙️ 설정")
     is_mobile = st.checkbox("📱 모바일 모드 (탭 보기)", value=False)
-    st.divider()
-    st.metric("📌 전체 작업", f"{total}개")
-    st.metric("✅ 완료", f"{done}개")
-    st.metric("⏳ 대기", f"{pending}개")
 
-# ★ 레이아웃 분기점
+# ★ [복구됨] 통계 지표를 다시 메인 화면 상단으로 이동!
+m1, m2, m3 = st.columns(3)
+m1.metric("📌 전체 작업", f"{total}개")
+m2.metric("✅ 완료", f"{done}개")
+m3.metric("⏳ 대기", f"{pending}개")
+
+st.divider() # 구분선
+
+# 레이아웃 분기점
 if is_mobile:
     tab1, tab2 = st.tabs(["💬 채팅 비서", "📊 프로젝트 시트"])
     container_chat = tab1
@@ -160,7 +166,7 @@ with container_chat:
         try:
             res = model.generate_content(system_prompt + "\n사용자: " + prompt)
             text = res.text.strip()
-            # (JSON 파싱 로직 간소화)
+            # JSON 파싱
             json_objs = re.findall(r'\{.*?\}', text.replace("```json","").replace("```",""), re.DOTALL)
             
             processed = False
