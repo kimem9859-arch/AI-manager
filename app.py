@@ -218,4 +218,32 @@ if prompt:
     
     규칙:
     1. 공지변경: {{"action":"notice", "value":"내용"}}
-    2. 작업변경: {{"action":"update", "task":"이름", "target":"상태
+    2. 작업변경: {{"action":"update", "task":"이름", "target":"상태/비고/세부내용", "value":"값"}}
+    3. 작업추가: {{"action":"add", "task":"이름"}}
+    4. 작업삭제: {{"action":"delete", "task":"이름"}}
+    
+    물품 관련 질문은 [물품 목록]을 보고 답변해.
+    """
+    
+    try:
+        res = model.generate_content(sys_prompt + "\nUser:" + prompt)
+        txt = res.text.strip()
+        jsons = re.findall(r'\{.*?\}', txt.replace("```json","").replace("```",""), re.DOTALL)
+        
+        processed = False
+        if jsons:
+            for j in jsons:
+                try:
+                    cmd = json.loads(j)
+                    act = cmd.get("action")
+                    if act=="notice": update_notice(cmd['value']); processed=True
+                    elif act=="update": update_sheet_any(cmd['task'], cmd['target'], cmd['value']); processed=True
+                    elif act=="add": add_new_task(cmd['task']); processed=True
+                    elif act=="delete": delete_task(cmd['task']); processed=True
+                except: pass
+        
+        if processed: st.rerun()
+        else:
+            with chat_con: st.chat_message("assistant").write(txt)
+            st.session_state.messages.append({"role":"assistant", "content":txt})
+    except Exception as e: st.error(f"Error: {e}")
