@@ -16,7 +16,7 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("API 키가 설정되지 않았습니다.")
 
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-2.5-pro')
 
 def connect_to_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
