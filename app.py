@@ -131,20 +131,29 @@ except:
     df = pd.DataFrame()
     total, done, pending = 0,0,0
 
-# (2) 물품 데이터
+# (2) 물품 데이터 (수정됨: 비고란 자동복사 방지 + 중복 방지)
 try:
     item_sheet = connect_to_item_sheet()
-    # 시트가 방금 만들어져서 비어있을 수 있으므로 예외 처리
     item_data = item_sheet.get_all_records()
     df_items = pd.DataFrame(item_data)
+    
     if not df_items.empty:
-        # 빈칸 채우기 (병합된 셀 대응)
-        df_items = df_items.replace("", pd.NA).ffill()
+        # 1. 일단 빈칸을 '없음(NA)'으로 표시
+        df_items = df_items.replace("", pd.NA)
+        
+        # 2. ★ [핵심 수정] '구분(첫 번째 열)'만 위에서 아래로 채우기
+        # (df_items 전체에 ffill을 걸지 않고, iloc[:, 0]에만 겁니다!)
+        df_items.iloc[:, 0] = df_items.iloc[:, 0].ffill()
+        
+        # 3. '물품 종류(두 번째 열)'가 비어있는 줄은 가짜 데이터(빈 줄)니 삭제!
+        # (이게 멀티탭 중복 문제를 해결해 줍니다)
+        df_items = df_items.dropna(subset=[df_items.columns[1]])
+        
+        # 4. 나머지 진짜 빈칸(비고란 등)은 그냥 '-'로 채우기
+        # (이제 윗줄 내용을 복사하지 않습니다)
         df_items = df_items.fillna("-")
 except:
     df_items = pd.DataFrame()
-
-current_notice = get_notice()
 
 # ----------------------------------------------------------
 # 3. 화면 구성
