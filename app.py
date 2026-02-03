@@ -15,8 +15,21 @@ st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖",
 # 세션 상태 초기화
 if "first_visit" not in st.session_state:
     st.session_state.first_visit = True
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-# ★ [수정됨] 사용 설명서: 줄바꿈을 넣어 세로로 보기 좋게 변경!
+# ★ [핵심 기능] 방금 대화 취소 함수
+def undo_last_chat():
+    if len(st.session_state.messages) >= 2:
+        st.session_state.messages.pop() # AI 답변 삭제
+        st.session_state.messages.pop() # 내 질문 삭제
+        st.toast("↩️ 방금 대화를 취소했습니다!", icon="🗑️")
+        time.sleep(0.5)
+        st.rerun()
+    else:
+        st.toast("⚠️ 취소할 대화 내역이 없습니다.")
+
+# 사용 설명서 팝업
 @st.dialog("📖 사용 설명서")
 def show_guide():
     st.markdown("""
@@ -31,8 +44,8 @@ def show_guide():
     **3. 📦 물품 리스트**
     구매 목록을 확인합니다. ('물품' 시트)
     
-    **4. 📱 모바일 모드**
-    왼쪽 사이드바에서 설정할 수 있습니다.
+    **4. ↩️ 되돌리기 버튼**
+    채팅창 오른쪽 위의 빨간 버튼을 누르면 마지막 대화를 취소합니다.
     """)
     if st.button("닫기", use_container_width=True):
         st.rerun()
@@ -55,13 +68,11 @@ def get_spreadsheet():
     client = gspread.authorize(creds)
     return client.open("Safety_Project")
 
-# 1. 작업 시트 연결
 def connect_to_task_sheet():
     sh = get_spreadsheet()
     try: return sh.worksheet("작업")
     except: return sh.sheet1 
 
-# 2. 공지 시트 연결
 def connect_to_notice_sheet():
     sh = get_spreadsheet()
     try: return sh.worksheet("공지")
@@ -70,11 +81,9 @@ def connect_to_notice_sheet():
         new.update_cell(1,1,"공지없음")
         return new
 
-# 3. 물품 시트 연결
 def connect_to_item_sheet():
     sh = get_spreadsheet()
-    try:
-        return sh.worksheet("물품")
+    try: return sh.worksheet("물품")
     except:
         new_sheet = sh.add_worksheet(title="물품", rows="100", cols="6")
         new_sheet.append_row(["품목명", "수량", "가격", "구매처", "링크", "비고"])
@@ -124,7 +133,6 @@ if st.session_state.first_visit:
     show_guide()
     st.session_state.first_visit = False
 
-# (1) 작업 데이터
 try:
     task_sheet = connect_to_task_sheet()
     data = task_sheet.get_all_records()
@@ -136,24 +144,18 @@ except:
     df = pd.DataFrame()
     total, done, pending = 0,0,0
 
-# (2) 물품 데이터 (중복/비고란 문제 해결 적용됨)
 try:
     item_sheet = connect_to_item_sheet()
     item_data = item_sheet.get_all_records()
     df_items = pd.DataFrame(item_data)
-    
     if not df_items.empty:
         df_items = df_items.replace("", pd.NA)
-        # '구분(1열)'만 채우기
         df_items.iloc[:, 0] = df_items.iloc[:, 0].ffill()
-        # '물품 종류(2열)' 없으면 삭제
         df_items = df_items.dropna(subset=[df_items.columns[1]])
-        # 나머지 빈칸 채우기
         df_items = df_items.fillna("-")
 except:
     df_items = pd.DataFrame()
 
-# ★ 오류 해결: 변수 정의 위치 수정
 current_notice = get_notice()
 
 # ----------------------------------------------------------
@@ -164,6 +166,7 @@ st.title("🤖 든든한 프로젝트 매니저")
 with st.sidebar:
     st.header("⚙️ 설정")
     is_mobile = st.checkbox("📱 모바일 모드", value=False)
+    st.divider()
     if st.button("❓ 도움말"): show_guide()
     st.link_button("📂 구글시트 바로가기", "https://docs.google.com/spreadsheets/")
 
@@ -176,7 +179,6 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 탭 구성
 if is_mobile:
     tab1, tab2, tab3 = st.tabs(["💬 채팅", "📊 작업", "📦 물품"])
     c_chat, c_sheet, c_items = tab1, tab2, tab3
@@ -188,28 +190,35 @@ else:
         c_sheet = sub_tab1
         c_items = sub_tab2
 
-# [탭 2] 작업
 with c_sheet:
     if not df.empty:
         st.dataframe(df, use_container_width=True, height=500)
     else: st.info("작업 데이터가 없습니다.")
 
-# [탭 3] 물품
 with c_items:
     if not df_items.empty:
         st.dataframe(df_items, use_container_width=True, height=500)
     else:
         st.info("📦 물품 리스트가 비어있습니다.")
 
-# [탭 1] 채팅
 with c_chat:
     if current_notice not in ["-", "공지없음"]:
         st.info(f"📢 **공지:** {current_notice}")
     
-    st.subheader("💬 AI 비서")
+    # ★ [UI 변경] 채팅창 헤더에 '되돌리기' 버튼 배치
+    # 컬럼을 나누어 왼쪽엔 제목, 오른쪽엔 버튼을 둡니다.
+    chat_header_col1, chat_header_col2 = st.columns([1, 0.4])
+    
+    with chat_header_col1:
+        st.subheader("💬 AI 비서")
+    
+    with chat_header_col2:
+        # 빨간색(primary) 버튼으로 눈에 띄게 만듭니다.
+        if st.button("↩️ 되돌리기", type="primary", use_container_width=True, help="방금 한 질문과 답변을 삭제합니다."):
+            undo_last_chat()
+
     chat_con = st.container(height=400 if is_mobile else 550, border=True)
     
-    if "messages" not in st.session_state: st.session_state.messages=[]
     with chat_con:
         for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
 
