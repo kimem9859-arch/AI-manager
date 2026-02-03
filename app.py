@@ -16,17 +16,25 @@ st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖",
 if "first_visit" not in st.session_state:
     st.session_state.first_visit = True
 
-# 사용 설명서 팝업
+# ★ [수정됨] 사용 설명서: 줄바꿈을 넣어 세로로 보기 좋게 변경!
 @st.dialog("📖 사용 설명서")
 def show_guide():
     st.markdown("""
     ### 👋 환영합니다!
-    **1. 💬 채팅 비서:** 작업 관리 & 물품 검색
-    **2. 📊 작업 리스트:** 할 일 목록 ('작업' 시트)
-    **3. 📦 물품 리스트:** 구매 목록 ('물품' 시트)
-    **4. 📱 모바일 모드:** 사이드바 설정
+    
+    **1. 💬 채팅 비서**
+    작업 관리 & 물품 검색을 도와줍니다.
+    
+    **2. 📊 작업 리스트**
+    할 일 목록을 관리합니다. ('작업' 시트)
+    
+    **3. 📦 물품 리스트**
+    구매 목록을 확인합니다. ('물품' 시트)
+    
+    **4. 📱 모바일 모드**
+    왼쪽 사이드바에서 설정할 수 있습니다.
     """)
-    if st.button("닫기"):
+    if st.button("닫기", use_container_width=True):
         st.rerun()
 
 if "GOOGLE_API_KEY" in st.secrets:
@@ -34,7 +42,7 @@ if "GOOGLE_API_KEY" in st.secrets:
 else:
     st.error("API 키 설정 필요")
 
-# ★ 모델 설정 (gemini-2.5-pro 고정)
+# 모델 설정
 model = genai.GenerativeModel('gemini-2.5-pro')
 
 def get_spreadsheet():
@@ -58,20 +66,17 @@ def connect_to_notice_sheet():
     sh = get_spreadsheet()
     try: return sh.worksheet("공지")
     except:
-        # 없으면 자동 생성
         new = sh.add_worksheet("공지", 10, 2)
         new.update_cell(1,1,"공지없음")
         return new
 
-# 3. ★ [수정됨] 물품 시트 연결 (자동 생성 기능 추가!)
+# 3. 물품 시트 연결
 def connect_to_item_sheet():
     sh = get_spreadsheet()
     try:
         return sh.worksheet("물품")
     except:
-        # ★ 물품 시트가 없으면 자동으로 만들어줍니다!
         new_sheet = sh.add_worksheet(title="물품", rows="100", cols="6")
-        # 헷갈리지 않게 첫 줄에 예시 제목도 넣어줍니다.
         new_sheet.append_row(["품목명", "수량", "가격", "구매처", "링크", "비고"])
         return new_sheet
 
@@ -131,29 +136,25 @@ except:
     df = pd.DataFrame()
     total, done, pending = 0,0,0
 
-# (2) 물품 데이터 (수정됨: 비고란 자동복사 방지 + 중복 방지)
+# (2) 물품 데이터 (중복/비고란 문제 해결 적용됨)
 try:
     item_sheet = connect_to_item_sheet()
     item_data = item_sheet.get_all_records()
     df_items = pd.DataFrame(item_data)
     
     if not df_items.empty:
-        # 1. 일단 빈칸을 '없음(NA)'으로 표시
         df_items = df_items.replace("", pd.NA)
-        
-        # 2. ★ [핵심 수정] '구분(첫 번째 열)'만 위에서 아래로 채우기
-        # (df_items 전체에 ffill을 걸지 않고, iloc[:, 0]에만 겁니다!)
+        # '구분(1열)'만 채우기
         df_items.iloc[:, 0] = df_items.iloc[:, 0].ffill()
-        
-        # 3. '물품 종류(두 번째 열)'가 비어있는 줄은 가짜 데이터(빈 줄)니 삭제!
-        # (이게 멀티탭 중복 문제를 해결해 줍니다)
+        # '물품 종류(2열)' 없으면 삭제
         df_items = df_items.dropna(subset=[df_items.columns[1]])
-        
-        # 4. 나머지 진짜 빈칸(비고란 등)은 그냥 '-'로 채우기
-        # (이제 윗줄 내용을 복사하지 않습니다)
+        # 나머지 빈칸 채우기
         df_items = df_items.fillna("-")
 except:
     df_items = pd.DataFrame()
+
+# ★ 오류 해결: 변수 정의 위치 수정
+current_notice = get_notice()
 
 # ----------------------------------------------------------
 # 3. 화면 구성
@@ -198,7 +199,7 @@ with c_items:
     if not df_items.empty:
         st.dataframe(df_items, use_container_width=True, height=500)
     else:
-        st.info("📦 물품 리스트가 비어있습니다. 구글 시트의 '물품' 탭에 엑셀 내용을 붙여넣어 주세요!")
+        st.info("📦 물품 리스트가 비어있습니다.")
 
 # [탭 1] 채팅
 with c_chat:
