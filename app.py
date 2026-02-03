@@ -68,49 +68,70 @@ def delete_task(task_name):
         return False
 
 # ----------------------------------------------------------
-# 3. 화면 구성 (대시보드 추가)
+# 3. 화면 구성 (UI 레이아웃 변경)
 # ----------------------------------------------------------
 st.title("🤖 든든한 프로젝트 매니저")
 
-# 데이터 불러오기
+# [데이터 불러오기]
 try:
     sheet = connect_to_sheet()
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     task_list = [str(row['작업명']) for row in data]
     
-    # ★ [신규 기능] 대시보드 지표 계산
+    # 지표 계산
     total_tasks = len(df)
     completed_tasks = len(df[df['상태'] == '완료'])
     pending_tasks = len(df[df['상태'] == '대기'])
     
-    # 화면 상단에 멋진 통계 박스 3개 배치
-    m1, m2, m3 = st.columns(3)
-    m1.metric("📌 전체 작업", f"{total_tasks}개")
-    m2.metric("✅ 완료됨", f"{completed_tasks}개")
-    m3.metric("⏳ 대기중", f"{pending_tasks}개")
-    
-    st.divider() # 구분선
-
 except:
     st.error("시트 연결 대기중...")
     df = pd.DataFrame()
     task_list = []
 
-col1, col2 = st.columns([1, 1.2])
+# --- [UI 핵심 변경] 기기에 따라 레이아웃 선택 ---
+with st.sidebar:
+    st.header("⚙️ 화면 설정")
+    # 모바일에서는 이 체크박스를 켜서 '탭' 모드로 봅니다.
+    is_mobile = st.checkbox("📱 모바일 모드 (탭으로 보기)", value=False)
+    
+    st.divider()
+    st.write(f"📌 전체 작업: {total_tasks}개")
+    st.write(f"✅ 완료됨: {completed_tasks}개")
+    st.write(f"⏳ 대기중: {pending_tasks}개")
 
-# [오른쪽] 시트 현황판
-with col2:
+# 레이아웃 결정 (모바일이면 탭, PC면 컬럼)
+if is_mobile:
+    # [모바일] 탭으로 나누기 (채팅 탭 / 시트 탭)
+    container_chat, container_sheet = st.tabs(["💬 채팅 비서", "📊 프로젝트 시트"])
+else:
+    # [PC] 화면을 반으로 나누기 (왼쪽 채팅, 오른쪽 시트)
+    col1, col2 = st.columns([1, 1.2])
+    container_chat = col1
+    container_sheet = col2
+
+# ----------------------------------------------------------
+# [화면 1] 시트 현황판 (container_sheet 안에 넣기)
+# ----------------------------------------------------------
+with container_sheet:
     st.subheader("📊 실시간 프로젝트 리스트")
     if not df.empty:
-        st.dataframe(df, use_container_width=True, height=500)
+        # 모바일에서도 잘 보이게 높이 조정
+        st.dataframe(df, use_container_width=True, height=400 if is_mobile else 600)
+    else:
+        st.info("데이터가 없습니다.")
 
 # ----------------------------------------------------------
-# [왼쪽] 채팅창 (여기서부터 끝까지 복사해서 덮어쓰세요!)
+# [화면 2] 채팅창 (container_chat 안에 넣기)
 # ----------------------------------------------------------
-with col1:
+with container_chat:
+    st.info("📢 공지사항: 오늘 밤 서버 점검이 있습니다.")
+    
     st.subheader("💬 AI 작업 비서")
-    chat_container = st.container(height=500, border=True)
+    
+    # 채팅창 높이도 모바일에선 조금 작게, PC에선 크게
+    chat_height = 400 if is_mobile else 600
+    chat_container = st.container(height=chat_height, border=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -120,7 +141,7 @@ with col1:
             with st.chat_message(message["role"]):
                 st.write(message["content"])
 
-    prompt = st.chat_input("명령을 입력하세요... (예: 진행 상황 요약해줘)")
+    prompt = st.chat_input("명령을 입력하세요...")
 
     if prompt:
         with chat_container:
@@ -128,24 +149,19 @@ with col1:
                 st.write(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # ★★★ [업그레이드된 프롬프트] ★★★
-        # AI에게 현재 시트의 모든 정보를 줍니다.
+        # --- AI 프롬프트 및 로직 (기존과 동일) ---
         current_data_context = df.to_csv(index=False) if not df.empty else "데이터 없음"
 
         system_prompt = f"""
         너는 유능한 프로젝트 매니저야.
-        
         [현재 시트 데이터]
         {current_data_context}
-        
         [수행 규칙]
-        1. 사용자가 **'추가', '수정', '삭제'** 같은 명확한 명령을 내리면 반드시 아래 JSON 형식으로만 답해.
+        1. '추가', '수정', '삭제' 명령은 JSON으로 답해.
            - 수정: {{"action": "update", "task": "작업명", "target": "상태/비고/세부내용", "value": "변경할내용"}}
            - 추가: {{"action": "add", "task": "새로운작업명"}}
            - 삭제: {{"action": "delete", "task": "삭제할작업명"}}
-           
-        2. 사용자가 **'요약', '브리핑', '질문'**을 하면 JSON을 쓰지 말고, 위 [현재 시트 데이터]를 분석해서 자연스러운 한국어로 답변해.
-           - 예: "현재 완료된 작업은 2개이고, 급한 건 000입니다."
+        2. 그 외 질문은 자연스러운 한국어로 답해.
         """
         
         full_prompt = system_prompt + "\n사용자: " + prompt
@@ -154,49 +170,40 @@ with col1:
             response = model.generate_content(full_prompt)
             ai_text = response.text.strip()
             
-            # JSON이 있는지 검사 (명령어인지 확인)
             clean_text = ai_text.replace("```json", "").replace("```", "").strip()
             json_objects = re.findall(r'\{.*?\}', clean_text, re.DOTALL)
             
             processed_count = 0
             
-            # 1. JSON 명령어가 발견되면 실행 (기존 로직)
             if json_objects:
                 for json_str in json_objects:
                     try:
                         command = json.loads(json_str)
-                        
                         if command.get("action") == "update":
                             if update_sheet_any(command['task'], command['target'], command['value']):
-                                result_msg = f"✅ **'{command['task']}'**의 **{command['target']}** ➔ **'{command['value']}'** 변경!"
+                                result_msg = f"✅ **'{command['task']}'** 수정 완료!"
                                 st.session_state.messages.append({"role": "assistant", "content": result_msg})
                                 processed_count += 1
-                        
                         elif command.get("action") == "add":
                             if add_new_task(command['task']):
                                 result_msg = f"🆕 **'{command['task']}'** 추가 완료!"
                                 st.session_state.messages.append({"role": "assistant", "content": result_msg})
                                 processed_count += 1
-
                         elif command.get("action") == "delete":
                             if delete_task(command['task']):
                                 result_msg = f"🗑️ **'{command['task']}'** 삭제 완료."
                                 st.session_state.messages.append({"role": "assistant", "content": result_msg})
                                 processed_count += 1
-                                
-                    except json.JSONDecodeError:
+                    except:
                         continue 
 
                 if processed_count > 0:
                     st.rerun()
                 else:
-                    # JSON은 있었지만 실행 실패 시 (혹은 AI가 텍스트랑 JSON을 섞어 썼을 때 텍스트 보여주기)
                      with chat_container:
                         with st.chat_message("assistant"):
                             st.write(ai_text)
                      st.session_state.messages.append({"role": "assistant", "content": ai_text})
-
-            # 2. JSON이 없으면 그냥 일반 대화로 처리 (브리핑 기능 활성화!)
             else:
                 with chat_container:
                     with st.chat_message("assistant"):
@@ -204,4 +211,4 @@ with col1:
                 st.session_state.messages.append({"role": "assistant", "content": ai_text})
                 
         except Exception as e:
-            st.error(f"에러 발생: {e}")
+            st.error(f"에러: {e}")
