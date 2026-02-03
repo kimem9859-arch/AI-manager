@@ -11,11 +11,10 @@ import re
 # ----------------------------------------------------------
 st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖", layout="wide")
 
-# ★★★ API 키 입력 ★★★
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API 키가 없습니다.")
+    st.error("API 키가 아직 설정되지 않았습니다. Streamlit 설정을 확인해주세요.")
 
 try:
     genai.configure(api_key=GOOGLE_API_KEY.strip())
@@ -200,4 +199,5 @@ with col1:
                 st.session_state.messages.append({"role": "assistant", "content": ai_text})
                 
         except Exception as e:
+
             st.error(f"에러 발생: {e}")
