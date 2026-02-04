@@ -328,48 +328,57 @@ with c_chat:
         for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
 
 # ------------------------------------------------------------------
-# 4. AI 답변 및 액션 처리 (수정됨: KeyError 완전 해결)
+# 4. AI 답변 및 액션 처리 (수정됨: 글짓기 금지 & 명령 인식 강화)
 # ------------------------------------------------------------------
 if prompt := st.chat_input("AI 매니저에게 명령하세요 (예: 3D 모델링 진행률 50%로 변경해줘)"):
     # 1. 사용자 메시지 표시
     st.chat_message("user").write(prompt)
     
-    # 2. 데이터 안전하게 가져오기 (이름 몰라도 첫 번째 열 가져옴)
-    # 작업 리스트 추출
+    # 2. 데이터 현황 가져오기
     if not df.empty:
-        # 무조건 첫 번째 열(0번)을 작업 이름으로 간주
-        task_list_str = df.iloc[:, 0].tolist()
+        task_list_str = df.iloc[:, 0].tolist() # 작업 리스트 (첫 번째 열)
     else:
         task_list_str = '없음'
 
-    # 물품 리스트 추출
     if not df_items.empty:
-        # 물품 시트도 무조건 두 번째 열(1번, 보통 품목명)을 가져옴 (없으면 첫 번째)
         try:
-            item_list_str = df_items.iloc[:, 1].tolist() 
+            item_list_str = df_items.iloc[:, 1].tolist() # 품목명 (두 번째 열)
         except:
             item_list_str = df_items.iloc[:, 0].tolist()
     else:
         item_list_str = '없음'
 
-    # 3. AI에게 보낼 시스템 명령
+    # 3. AI에게 보낼 시스템 명령 (강력한 최면 걸기)
     system_instruction = f"""
-    너는 이 프로젝트의 AI 매니저야. 사용자의 말을 듣고 구글 시트를 관리해야 해.
-    사용자의 의도를 파악해서 반드시 아래 **JSON 형식**으로만 대답해. (다른 사족 붙이지 마)
-    
-    [현재 데이터 현황]
-    - 작업 리스트: {task_list_str}
-    - 물품 리스트: {item_list_str}
+    너는 구글 스프레드시트를 관리하는 'AI 프로젝트 매니저'야. 
+    **너는 절대로 문장을 교정하거나 글짓기를 도와주는 비서가 아니야.**
 
-    [명령어 규칙]
-    1. 추가: {{"action": "add", "type": "task/item", "content": "내용", "note": "비고(옵션)"}}
+    사용자의 말을 듣고 반드시 아래 **JSON 데이터**만 딱 출력해. (인사말, 설명, 코멘트 절대 금지)
+
+    [현재 작업 리스트]
+    {task_list_str}
+
+    [현재 물품 리스트]
+    {item_list_str}
+
+    [판단 규칙 (매우 중요)]
+    1. 사용자가 "바꿔줘", "수정해줘", "업데이트", "설정" 이라는 말과 함께 **숫자나 퍼센트(%)**를 언급하면 무조건 **"update"** 명령이다.
+    2. 작업 이름이 사용자가 말한 것과 조금 달라도, [현재 작업 리스트]에 있는 것 중 가장 비슷한 것을 찾아서 매칭해라.
+    3. 문장을 다듬어달라는 요청처럼 보여도, 작업 리스트에 있는 단어가 포함되어 있다면 무조건 시트 수정 명령으로 처리해.
+
+    [명령어 JSON 형식]
+    1. 추가: {{"action": "add", "type": "task/item", "content": "내용"}}
     2. 삭제: {{"action": "delete", "type": "task/item", "target": "지울항목명"}}
-    3. 수정(진행률): {{"action": "update", "target": "작업명", "value": "50%"}} 
-    4. 일반대화: {{"action": "chat", "response": "답변내용"}}
+    3. 수정(진행률): {{"action": "update", "target": "작업명(리스트에있는정확한이름)", "value": "50%"}} 
+    4. 답변: {{"action": "chat", "response": "할말"}}
 
-    [예시]
-    - "라즈베리파이 구매 추가해줘" -> {{"action": "add", "type": "item", "content": "라즈베리파이"}}
-    - "3D 모델링 완료했어(100%)" -> {{"action": "update", "target": "3D 모델링", "value": "100%"}}
+    [예시 데이터 학습]
+    - 사용자: "미선정 물품 사양 확정 및 선정 50%로 바꿔줘" 
+      -> (해석: 작업 리스트에 있는 '미선정 물품 사양 확정 및 선정'을 찾아서 값을 50%로 고쳐야 함)
+      -> 출력: {{"action": "update", "target": "미선정 물품 사양 확정 및 선정", "value": "50%"}}
+    
+    - 사용자: "라즈베리파이 구매 추가해"
+      -> 출력: {{"action": "add", "type": "item", "content": "라즈베리파이"}}
     """
     
     # 4. AI 생각 시키기
@@ -379,7 +388,7 @@ if prompt := st.chat_input("AI 매니저에게 명령하세요 (예: 3D 모델�
         response = model.generate_content(full_prompt)
         text_res = response.text.strip()
         
-        # JSON 부분만 발라내기
+        # JSON 정제 (백틱 제거)
         if "```" in text_res:
             text_res = text_res.replace("```json", "").replace("```", "").strip()
             
@@ -401,42 +410,46 @@ if prompt := st.chat_input("AI 매니저에게 명령하세요 (예: 3D 모델�
 
         # [B] 삭제 (Delete)
         elif action == "delete":
-            st.chat_message("assistant").write(f"🗑️ **{ai_data['target']}** 삭제 기능은 아직 안전을 위해 막아뒀어요. 시트에서 직접 지워주세요!")
+            st.chat_message("assistant").write(f"🗑️ **{ai_data['target']}** 삭제 기능은 시트 보호를 위해 잠시 꺼뒀습니다.")
 
         # [C] 수정 (Update)
         elif action == "update":
             target_task = ai_data.get("target")
             new_value = ai_data.get("value")
             
-            sh = conn.open("Project_Manager") # 파일명 확인!
+            # 시트 연결 및 수정
+            sh = conn.open("Project_Manager")
             ws = sh.worksheet("작업")
             
             try:
+                # 1. 작업 이름 찾기
                 cell = ws.find(target_task)
                 
-                # 진행률 열 찾기 (못 찾으면 F열(6번)로 가정)
+                # 2. 진행률 컬럼 찾기 (헤더 검색)
                 header = ws.row_values(1)
-                try:
-                    # '진행률'이라는 글자가 포함된 열 찾기
-                    col_idx = [i for i, h in enumerate(header) if '진행' in h][0] + 1
-                except:
-                    col_idx = 6 
+                col_idx = 6 # 기본값 (F열)
+                for i, h in enumerate(header):
+                    if "진행" in h: # '진행률', '진행상황' 등 포함되면 채택
+                        col_idx = i + 1
+                        break
                 
+                # 3. 값 업데이트
                 if "%" not in new_value: new_value += "%"
-                
                 ws.update_cell(cell.row, col_idx, new_value)
+                
                 st.chat_message("assistant").write(f"📈 **'{target_task}'**의 진행률을 **{new_value}**로 업데이트했습니다!")
                 st.rerun()
                 
             except Exception as e:
+                # 못 찾았을 때만 채팅으로 물어봄
                 st.error(f"수정 실패: {e}")
-                st.chat_message("assistant").write(f"😅 **'{target_task}'**를 못 찾겠어요.")
+                st.chat_message("assistant").write(f"😅 **'{target_task}'** 작업을 시트에서 못 찾겠어요. 이름이 정확한가요?")
 
         # [D] 일반 대화
         else:
             st.chat_message("assistant").write(ai_data.get("response"))
 
     except Exception as e:
-        # 에러 나면 일반 대화 시도
+        # JSON 파싱 실패 시 일반 대화
         response = model.generate_content(prompt)
         st.chat_message("assistant").write(response.text)
