@@ -108,9 +108,6 @@ def delete_task(task):
 # ----------------------------------------------------------
 # 2. 데이터 로딩
 # ----------------------------------------------------------
-if st.session_state.first_visit:
-    show_guide()
-    st.session_state.first_visit = False
 
 try:
     task_sheet = connect_to_task_sheet()
