@@ -1,0 +1,14 @@
+# 프로젝트 개요
+이 프로젝트는 Streamlit을 사용한 'AI 프로젝트 매니저' 웹 애플리케이션입니다.
+Google Sheets를 DB로 사용하며, Gemini API를 통해 자연어 명령을 처리합니다.
+
+# 기술 스택
+- Python, Streamlit
+- gspread (Google Sheets), pandas
+- google-generativeai (Gemini)
+
+# 코딩 규칙 (매우 중요)
+1. **기존 기능 보존:** 코드를 수정할 때 기존의 '채팅창 고정 UI', '탭 구조'를 깨뜨리지 마세요.
+2. **Streamlit 특성:** `st.rerun()`을 적절히 사용하여 상태를 갱신하세요.
+3. **AI 프롬프트 유지:** `app.py` 내부의 `sys_msg` 변수에 정의된 [5대 절대 규칙]은 수정하지 마세요. (JSON 출력, 완료=Update 등)
+4. **한글 주석:** 모든 설명과 주석은 한글로 작성하세요.
