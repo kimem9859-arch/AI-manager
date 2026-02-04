@@ -4,21 +4,18 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 import json
-import re 
 import time
 
 # ----------------------------------------------------------
-# 1. 초기 설정 & 함수
+# 1. 초기 설정 & 필수 함수
 # ----------------------------------------------------------
 st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖", layout="wide")
 
 # 세션 상태 초기화
-if "first_visit" not in st.session_state:
-    st.session_state.first_visit = True
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ★ [핵심 기능] 방금 대화 취소 함수
+# [기능] 방금 대화 취소 (Undo)
 def undo_last_chat():
     if len(st.session_state.messages) >= 2:
         st.session_state.messages.pop() # AI 답변 삭제
@@ -29,140 +26,112 @@ def undo_last_chat():
     else:
         st.toast("⚠️ 취소할 대화 내역이 없습니다.")
 
-# 사용 설명서 팝업
+# [기능] 사용 설명서
 @st.dialog("📖 사용 설명서")
 def show_guide():
     st.markdown("""
     ### 👋 환영합니다!
+    **1. 💬 채팅 명령**
+    - "라즈베리파이 추가해줘" (추가)
+    - "3D 모델링 진행률 50%로 바꿔줘" (수정)
     
-    **1. 💬 채팅 비서**
-    작업 관리 & 물품 검색을 도와줍니다.
+    **2. 📊 시트 관리**
+    - **작업 탭:** 진행률에 따라 색상이 변합니다.
+    - **물품 탭:** 총 비용 계산 & 구매 링크 버튼이 제공됩니다.
     
-    **2. 📊 작업 리스트**
-    할 일 목록을 관리합니다. ('작업' 시트)
-    
-    **3. 📦 물품 리스트**
-    구매 목록을 확인합니다. ('물품' 시트)
-    
-    **4. ↩️ 되돌리기 버튼**
-    채팅창 오른쪽 위의 빨간 버튼을 누르면 마지막 대화를 취소합니다.
+    **3. ↩️ 되돌리기**
+    - 채팅창 오른쪽 위 빨간 버튼으로 실행 취소가 가능합니다.
     """)
-    if st.button("닫기", use_container_width=True):
-        st.rerun()
 
-if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-else:
-    st.error("API 키 설정 필요")
-
-# 모델 설정
-model = genai.GenerativeModel('gemini-2.5-pro')
-
+# [기능] 구글 시트 연결 (통합)
 def get_spreadsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
+        # Streamlit Cloud 배포용 (Secrets)
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     except:
+        # 로컬 실행용 (json 파일)
         creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
+    
     client = gspread.authorize(creds)
-    return client.open("Safety_Project")
+    # ★ 중요: 파일 이름이 맞는지 확인하세요!
+    return client.open("Project_Manager") 
 
-def connect_to_task_sheet():
-    sh = get_spreadsheet()
-    try: return sh.worksheet("작업")
-    except: return sh.sheet1 
+# [기능] 시트 데이터 가져오기 (헤더 자동 찾기 기능 포함)
+def load_data_safe(sheet_name):
+    try:
+        sh = get_spreadsheet()
+        ws = sh.worksheet(sheet_name)
+        all_values = ws.get_all_values()
+        
+        # 데이터가 없으면 빈 표 반환
+        if not all_values: return pd.DataFrame()
 
-def connect_to_notice_sheet():
-    sh = get_spreadsheet()
-    try: return sh.worksheet("공지")
+        # 헤더 찾기 (단어 포함 여부로 실제 헤더 위치 추적)
+        header_idx = 0
+        keywords = ['품목', '작업', 'Task', 'Item', '내용']
+        for i, row in enumerate(all_values[:5]):
+            if any(k in str(r) for k in keywords for r in row):
+                header_idx = i
+                break
+        
+        # 데이터프레임 생성
+        df = pd.DataFrame(all_values[header_idx+1:], columns=all_values[header_idx])
+        return df
     except:
-        new = sh.add_worksheet("공지", 10, 2)
-        new.update_cell(1,1,"공지없음")
-        return new
+        return pd.DataFrame() # 에러나면 빈 표
 
-def connect_to_item_sheet():
-    sh = get_spreadsheet()
-    try: return sh.worksheet("물품")
-    except:
-        new_sheet = sh.add_worksheet(title="물품", rows="100", cols="6")
-        new_sheet.append_row(["품목명", "수량", "가격", "구매처", "링크", "비고"])
-        return new_sheet
-
-def get_notice():
+# [기능] 시트 업데이트 (범용)
+def update_sheet_any(sheet_name, row_data):
     try:
-        sh = connect_to_notice_sheet()
-        val = sh.cell(1,1).value
-        return val if val else "공지없음"
-    except: return "-"
-
-def update_notice(txt):
-    try:
-        connect_to_notice_sheet().update_cell(1,1,txt)
+        client = get_spreadsheet()
+        ws = client.worksheet(sheet_name)
+        ws.append_row(row_data)
         return True
     except: return False
 
-def update_sheet_any(task, col, val):
-    try:
-        sh = connect_to_task_sheet()
-        cell = sh.find(task)
-        col_map = {"상태":3, "비고":4, "세부내용":2}
-        idx = col_map.get(col)
-        if idx: sh.update_cell(cell.row, idx, val)
-        return True
-    except: return False
-
-def add_new_task(task):
-    try:
-        connect_to_task_sheet().append_row([task, "설정필요", "대기", "-"])
-        return True
-    except: return False
-
-def delete_task(task):
-    try:
-        sh = connect_to_task_sheet()
-        cell = sh.find(task)
-        sh.delete_rows(cell.row)
-        return True
-    except: return False
+# Gemini 모델 설정
+if "GOOGLE_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+model = genai.GenerativeModel('gemini-2.5-pro')
 
 # ----------------------------------------------------------
-# 2. 데이터 로딩
+# 2. 데이터 로딩 (화면 그리기 전 준비)
 # ----------------------------------------------------------
-if st.session_state.first_visit:
-    show_guide()
-    st.session_state.first_visit = False
+# 작업 데이터 로드
+df_task = load_data_safe("작업")
+if not df_task.empty and '상태' in df_task.columns:
+    total = len(df_task)
+    done = len(df_task[df_task['상태']=='완료'])
+    pending = len(df_task[df_task['상태']=='대기'])
+else:
+    total, done, pending = 0, 0, 0
 
-try:
-    task_sheet = connect_to_task_sheet()
-    data = task_sheet.get_all_records()
-    df = pd.DataFrame(data)
-    total = len(df)
-    done = len(df[df['상태']=='완료']) if not df.empty else 0
-    pending = len(df[df['상태']=='대기']) if not df.empty else 0
-except:
-    df = pd.DataFrame()
-    total, done, pending = 0,0,0
-
-try:
-    item_sheet = connect_to_item_sheet()
-    item_data = item_sheet.get_all_records()
-    df_items = pd.DataFrame(item_data)
-    if not df_items.empty:
-        df_items = df_items.replace("", pd.NA)
-        df_items.iloc[:, 0] = df_items.iloc[:, 0].ffill()
-        df_items = df_items.dropna(subset=[df_items.columns[1]])
-        df_items = df_items.fillna("-")
-except:
-    df_items = pd.DataFrame()
-
-current_notice = get_notice()
+# 물품 데이터 로드
+df_items = load_data_safe("물품")
+# 물품 데이터 전처리 (링크, 숫자 변환)
+if not df_items.empty:
+    # 1. 빈칸 채우기
+    df_items = df_items.fillna("-")
+    
+    # 2. 금액 열 숫자로 변환 (비용 계산용)
+    for col in df_items.columns:
+        if any(k in col for k in ['금액', '가격', '비용']):
+            df_items[col] = (
+                df_items[col].astype(str)
+                .str.replace(',', '')
+                .str.replace('원', '')
+                .apply(pd.to_numeric, errors='coerce')
+                .fillna(0)
+            )
 
 # ----------------------------------------------------------
-# 3. 화면 구성
+# 3. 화면 UI 구성
 # ----------------------------------------------------------
 st.title("🤖 든든한 프로젝트 매니저")
 
+# 사이드바
 with st.sidebar:
     st.header("⚙️ 설정")
     is_mobile = st.checkbox("📱 모바일 모드", value=False)
@@ -170,286 +139,176 @@ with st.sidebar:
     if st.button("🔄 데이터 새로고침", use_container_width=True):
         st.rerun()
     if st.button("❓ 도움말"): show_guide()
-    st.link_button("📂 구글시트 바로가기", "https://docs.google.com/spreadsheets/")
 
-# 통계 UI
+# 상단 통계 카드
 st.markdown(f"""
-    <div style="display:flex; justify-content:space-around; background-color:rgba(255,255,255,0.1); padding:10px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.2);">
-        <div style="text-align:center;"><p style="margin:0; font-size:14px; opacity:0.8;">📌 전체</p><p style="margin:0; font-size:20px; font-weight:bold;">{total}</p></div>
-        <div style="text-align:center;"><p style="margin:0; font-size:14px; opacity:0.8;">✅ 완료</p><p style="margin:0; font-size:20px; font-weight:bold;">{done}</p></div>
-        <div style="text-align:center;"><p style="margin:0; font-size:14px; opacity:0.8;">⏳ 대기</p><p style="margin:0; font-size:20px; font-weight:bold;">{pending}</p></div>
+    <div style="display:flex; justify-content:space-around; background-color:rgba(100,100,100,0.1); padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);">
+        <div style="text-align:center;">📌 전체 작업<br><b style="font-size:20px;">{total}</b></div>
+        <div style="text-align:center;">✅ 완료됨<br><b style="font-size:20px; color:#4CAF50;">{done}</b></div>
+        <div style="text-align:center;">⏳ 대기중<br><b style="font-size:20px; color:#FF9800;">{pending}</b></div>
     </div>
 """, unsafe_allow_html=True)
 
+# 탭 구성 (모바일/PC 분기)
 if is_mobile:
     tab1, tab2, tab3 = st.tabs(["💬 채팅", "📊 작업", "📦 물품"])
     c_chat, c_sheet, c_items = tab1, tab2, tab3
 else:
-    col1, col2 = st.columns([1, 1.2])
+    col1, col2 = st.columns([1, 1.3])
     c_chat = col1
     with col2:
-        sub_tab1, sub_tab2 = st.tabs(["📊 작업 리스트", "📦 물품 리스트"])
-        c_sheet = sub_tab1
-        c_items = sub_tab2
+        sub1, sub2 = st.tabs(["📊 작업 현황", "📦 물품 견적"])
+        c_sheet, c_items = sub1, sub2
 
-# [탭 2] 작업
+# --- [탭 1] 작업 리스트 (그라데이션) ---
 with c_sheet:
-    if not df.empty:
-        # 1. 색상 스타일 함수 정의 (그라데이션 로직)
+    if not df_task.empty:
+        # 색상 함수
         def color_progress(val):
-            # 값이 없거나 에러나면 투명하게
-            if pd.isna(val) or val == "" or val == "-":
-                return None
-            
-            # 문자열(10%)을 숫자(10)로 변환
+            if pd.isna(val) or str(val) in ["", "-"]: return None
             try:
-                numeric_val = float(str(val).replace('%', '').strip())
-            except:
-                return None
+                num = float(str(val).replace('%', '').strip())
+                if num >= 100: return 'background-color: #2E86C1; color: white; font-weight: bold;'
+                red = int(255 * (100 - num) / 100)
+                green = int(255 * num / 100)
+                return f'background-color: rgb({red}, {green}, 100); color: black;'
+            except: return None
 
-            # 100% 이상이면 파란색 (완료)
-            if numeric_val >= 100:
-                return 'background-color: #2E86C1; color: white; font-weight: bold;'
-            
-            # 0~99% 그라데이션 (빨강 -> 초록)
-            # 숫자가 낮을수록 빨강(Red), 높을수록 초록(Green) 비율을 높임
-            red = int(255 * (100 - numeric_val) / 100)
-            green = int(255 * numeric_val / 100)
-            # 글자색은 검정으로 통일하여 가독성 확보
-            return f'background-color: rgb({red}, {green}, 100); color: black;'
-
-        # 2. 스타일 적용 (진행률 컬럼이 있을 때만)
-        if '진행률' in df.columns:
-            # Pandas의 Style 기능을 사용하여 색 입히기
-            st.dataframe(
-                df.style.map(color_progress, subset=['진행률']), 
-                use_container_width=True, 
-                height=500
-            )
+        if '진행률' in df_task.columns:
+            st.dataframe(df_task.style.map(color_progress, subset=['진행률']), use_container_width=True, height=500)
         else:
-            # 진행률 컬럼이 아직 없으면 그냥 보여주기
-            st.dataframe(df, use_container_width=True, height=500)
-            st.caption("※ 구글 시트에 '진행률' 열을 추가하면 색상이 표시됩니다.")
-            
-    else: st.info("작업 데이터가 없습니다.")
+            st.dataframe(df_task, use_container_width=True, height=500)
+    else:
+        st.info("작업 리스트가 비어있습니다.")
 
-# [탭 3] 물품 (수정됨: 비용 계산 기능 강화 + 디버깅)
+# --- [탭 2] 물품 리스트 (링크 & 비용) ---
 with c_items:
     if not df_items.empty:
         df_display = df_items.copy()
         
-        # --- (1) 링크 처리 로직 (기존 유지) ---
-        if "구매 링크" not in df_display.columns:
-            df_display["구매 링크"] = None
-
+        # 링크 버튼 처리
+        if "구매 링크" not in df_display.columns: df_display["구매 링크"] = None
         if "비고" in df_display.columns:
             for i, row in df_display.iterrows():
                 val = str(row["비고"])
                 if val.startswith("http"):
                     df_display.at[i, "구매 링크"] = val
                     df_display.at[i, "비고"] = "-"
-
-        cols_to_clean = ["구매 링크"]
-        for col in cols_to_clean:
-            df_display[col] = df_display[col].replace({"-": None, "": None, "nan": None})
-            df_display[col] = df_display[col].where(pd.notnull(df_display[col]), None)
-        # ------------------------------------
-
-        # --- (2) 표 출력 ---
+        
+        # 출력
         st.dataframe(
             df_display, 
             use_container_width=True, 
-            height=500,
-            column_config={
-                "구매 링크": st.column_config.LinkColumn("구매 링크", display_text="🔗 바로가기")
-            }
+            height=400,
+            column_config={"구매 링크": st.column_config.LinkColumn("링크", display_text="🔗 구매")}
         )
 
-        # --- (3) ★ 핵심 수정: 총 비용 계산 로직 ---
-        # '금액'이랑 비슷한 단어가 들어간 열을 다 찾아봅니다. (예: '금액', '총금액', '가격', '비용')
-        possible_cols = [col for col in df_items.columns if any(keyword in col for keyword in ['금액', '가격', '비용'])]
-        
-        if possible_cols:
-            target_col = possible_cols[0] # 찾은 것 중 첫 번째를 사용 (예: '금액')
-            try:
-                # 1. 문자열로 변환 -> 2. 콤마(,) 제거 -> 3. '원' 글자 제거 -> 4. 숫자로 변환
-                # (숫자 변환이 안 되는 글자는 0으로 처리)
-                total_cost = (
-                    df_items[target_col]
-                    .astype(str)
-                    .str.replace(',', '')
-                    .str.replace('원', '')
-                    .apply(pd.to_numeric, errors='coerce')
-                    .fillna(0)
-                    .sum()
-                )
-                
-                # 멋진 UI 표시
-                st.markdown(f"""
-                    <div style="
-                        text-align: right; 
-                        padding: 15px; 
-                        background-color: rgba(40, 167, 69, 0.1); 
-                        border: 1px solid rgba(40, 167, 69, 0.3);
-                        border-radius: 10px; 
-                        margin-top: 10px;">
-                        <span style="font-size: 1.1em; font-weight: bold; margin-right: 10px; color: #555;">💰 총 예상 비용 ({target_col}):</span>
-                        <span style="font-size: 1.8em; color: #28a745; font-weight: bold;">{int(total_cost):,}원</span>
-                    </div>
-                """, unsafe_allow_html=True)
-            except Exception as e:
-                st.error(f"계산 중 오류 발생: {e}")
-        else:
-            # 못 찾았으면 왜 못 찾았는지 알려줌 (이게 뜨면 시트 열 이름을 확인하세요!)
-            st.warning(f"⚠️ 비용 계산 불가: 시트에 '금액'이나 '가격'이라고 적힌 열이 없습니다.\n(현재 인식된 열 이름: {list(df_items.columns)})")
-
+        # 총 비용 계산
+        cost_cols = [c for c in df_items.columns if any(k in c for k in ['금액', '가격', '비용'])]
+        if cost_cols:
+            total_cost = df_items[cost_cols[0]].sum()
+            st.markdown(f"""
+                <div style="text-align:right; padding:15px; background:rgba(0,200,100,0.1); border-radius:10px;">
+                    <span style="font-size:1.2em; font-weight:bold;">💰 총 견적 비용: </span>
+                    <span style="font-size:1.5em; color:#2ecc71; font-weight:bold;">{int(total_cost):,}원</span>
+                </div>
+            """, unsafe_allow_html=True)
     else:
-        st.info("📦 물품 리스트가 비어있습니다.")
+        st.info("물품 리스트가 비어있습니다.")
 
+# --- [탭 3] 채팅 및 AI 처리 (여기가 핵심!) ---
 with c_chat:
-    if current_notice not in ["-", "공지없음"]:
-        st.info(f"📢 **공지:** {current_notice}")
-    
-    # ★ [UI 변경] 채팅창 헤더에 '되돌리기' 버튼 배치
-    # 컬럼을 나누어 왼쪽엔 제목, 오른쪽엔 버튼을 둡니다.
-    chat_header_col1, chat_header_col2 = st.columns([1, 0.4])
-    
-    with chat_header_col1:
-        st.subheader("💬 AI 비서")
-    
-    with chat_header_col2:
-        # 빨간색(primary) 버튼으로 눈에 띄게 만듭니다.
-        if st.button("↩️ 되돌리기", type="primary", use_container_width=True, help="방금 한 질문과 답변을 삭제합니다."):
-            undo_last_chat()
+    # 채팅방 헤더 (제목 + 되돌리기 버튼)
+    h_col1, h_col2 = st.columns([1, 0.4])
+    h_col1.subheader("💬 AI 매니저")
+    if h_col2.button("↩️ 되돌리기", type="primary", use_container_width=True):
+        undo_last_chat()
 
-    chat_con = st.container(height=400 if is_mobile else 550, border=True)
-    
-    with chat_con:
-        for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
+    # 대화 기록 표시
+    chat_box = st.container(height=500, border=True)
+    with chat_box:
+        for m in st.session_state.messages:
+            st.chat_message(m["role"]).write(m["content"])
 
-# ------------------------------------------------------------------
-# 4. AI 답변 및 액션 처리 (수정됨: 글짓기 금지 & 명령 인식 강화)
-# ------------------------------------------------------------------
-if prompt := st.chat_input("AI 매니저에게 명령하세요 (예: 3D 모델링 진행률 50%로 변경해줘)"):
-    # 1. 사용자 메시지 표시
-    st.chat_message("user").write(prompt)
-    
-    # 2. 데이터 현황 가져오기
-    if not df.empty:
-        task_list_str = df.iloc[:, 0].tolist() # 작업 리스트 (첫 번째 열)
-    else:
-        task_list_str = '없음'
+    # 사용자 입력 처리
+    if prompt := st.chat_input("명령을 입력하세요 (예: 3D 모델링 50%로 설정해줘)"):
+        # 1. 사용자 메시지 기록
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        chat_box.chat_message("user").write(prompt)
 
-    if not df_items.empty:
+        # 2. 현재 데이터 요약 (AI에게 전달용)
+        task_summary = df_task.iloc[:, 0].tolist() if not df_task.empty else "없음"
+        
+        # 3. AI 시스템 프롬프트 (글짓기 금지 & JSON 강제)
+        sys_msg = f"""
+        당신은 구글 시트 데이터베이스 관리자입니다.
+        
+        [절대 규칙]
+        1. 당신은 사용자의 말을 듣고 **JSON 데이터만** 출력해야 합니다.
+        2. 절대로 대화하거나, 설명을 덧붙이거나, 문장을 교정하지 마십시오.
+        3. 사용자가 숫자(%)와 함께 "변경", "수정", "바꿔" 등을 말하면 무조건 'update' 명령입니다.
+
+        [현재 작업 목록]
+        {task_summary}
+
+        [출력 가능한 JSON 포맷]
+        - 추가: {{"action": "add", "sheet": "작업/물품", "row": ["내용", "대기", "", "", "", "0%"]}}
+          (물품일 경우: ["", "내용", "1", "", ""])
+        - 수정: {{"action": "update", "sheet": "작업", "target": "작업명", "value": "50%"}}
+        - 삭제: {{"action": "delete", "target": "..."}}
+        - 대화: {{"action": "chat", "response": "할말"}}
+        
+        [예시]
+        Q: "미선정 물품 50%로 바꿔줘"
+        A: {{"action": "update", "sheet": "작업", "target": "미선정 물품", "value": "50%"}}
+        """
+
         try:
-            item_list_str = df_items.iloc[:, 1].tolist() # 품목명 (두 번째 열)
-        except:
-            item_list_str = df_items.iloc[:, 0].tolist()
-    else:
-        item_list_str = '없음'
-
-    # 3. AI에게 보낼 시스템 명령 (강력한 최면 걸기)
-    system_instruction = f"""
-    너는 구글 스프레드시트를 관리하는 'AI 프로젝트 매니저'야. 
-    **너는 절대로 문장을 교정하거나 글짓기를 도와주는 비서가 아니야.**
-
-    사용자의 말을 듣고 반드시 아래 **JSON 데이터**만 딱 출력해. (인사말, 설명, 코멘트 절대 금지)
-
-    [현재 작업 리스트]
-    {task_list_str}
-
-    [현재 물품 리스트]
-    {item_list_str}
-
-    [판단 규칙 (매우 중요)]
-    1. 사용자가 "바꿔줘", "수정해줘", "업데이트", "설정" 이라는 말과 함께 **숫자나 퍼센트(%)**를 언급하면 무조건 **"update"** 명령이다.
-    2. 작업 이름이 사용자가 말한 것과 조금 달라도, [현재 작업 리스트]에 있는 것 중 가장 비슷한 것을 찾아서 매칭해라.
-    3. 문장을 다듬어달라는 요청처럼 보여도, 작업 리스트에 있는 단어가 포함되어 있다면 무조건 시트 수정 명령으로 처리해.
-
-    [명령어 JSON 형식]
-    1. 추가: {{"action": "add", "type": "task/item", "content": "내용"}}
-    2. 삭제: {{"action": "delete", "type": "task/item", "target": "지울항목명"}}
-    3. 수정(진행률): {{"action": "update", "target": "작업명(리스트에있는정확한이름)", "value": "50%"}} 
-    4. 답변: {{"action": "chat", "response": "할말"}}
-
-    [예시 데이터 학습]
-    - 사용자: "미선정 물품 사양 확정 및 선정 50%로 바꿔줘" 
-      -> (해석: 작업 리스트에 있는 '미선정 물품 사양 확정 및 선정'을 찾아서 값을 50%로 고쳐야 함)
-      -> 출력: {{"action": "update", "target": "미선정 물품 사양 확정 및 선정", "value": "50%"}}
-    
-    - 사용자: "라즈베리파이 구매 추가해"
-      -> 출력: {{"action": "add", "type": "item", "content": "라즈베리파이"}}
-    """
-    
-    # 4. AI 생각 시키기
-    full_prompt = system_instruction + f"\n사용자: {prompt}"
-    
-    try:
-        response = model.generate_content(full_prompt)
-        text_res = response.text.strip()
-        
-        # JSON 정제 (백틱 제거)
-        if "```" in text_res:
-            text_res = text_res.replace("```json", "").replace("```", "").strip()
+            # AI에게 요청
+            response = model.generate_content(sys_msg + f"\n사용자 요청: {prompt}")
+            text_res = response.text.strip().replace("```json", "").replace("```", "")
             
-        import json
-        ai_data = json.loads(text_res)
-        
-        action = ai_data.get("action")
-        
-        # [A] 추가 (Add)
-        if action == "add":
-            if ai_data["type"] == "task":
-                update_sheet_any(conn, "작업", [ai_data["content"], "대기", "", "", "", "0%"])
-                msg = f"✅ 작업 시트에 **'{ai_data['content']}'** 추가 완료!"
-            else:
-                update_sheet_any(conn, "물품", ["", ai_data["content"], "1", "", ""])
-                msg = f"📦 물품 시트에 **'{ai_data['content']}'** 추가 완료!"
-            st.chat_message("assistant").write(msg)
-            st.rerun()
+            # JSON 파싱
+            cmd = json.loads(text_res)
+            action = cmd.get("action")
 
-        # [B] 삭제 (Delete)
-        elif action == "delete":
-            st.chat_message("assistant").write(f"🗑️ **{ai_data['target']}** 삭제 기능은 시트 보호를 위해 잠시 꺼뒀습니다.")
+            # [동작 1] 추가 (Add)
+            if action == "add":
+                sheet_name = cmd.get("sheet", "작업")
+                row_vals = cmd.get("row")
+                update_sheet_any(sheet_name, row_vals)
+                msg = f"✅ **{sheet_name}** 시트에 추가되었습니다."
 
-        # [C] 수정 (Update)
-        elif action == "update":
-            target_task = ai_data.get("target")
-            new_value = ai_data.get("value")
-            
-            # 시트 연결 및 수정
-            sh = conn.open("Project_Manager")
-            ws = sh.worksheet("작업")
-            
-            try:
-                # 1. 작업 이름 찾기
-                cell = ws.find(target_task)
+            # [동작 2] 수정 (Update)
+            elif action == "update":
+                target = cmd.get("target")
+                val = cmd.get("value")
+                if "%" not in val: val += "%"
                 
-                # 2. 진행률 컬럼 찾기 (헤더 검색)
-                header = ws.row_values(1)
-                col_idx = 6 # 기본값 (F열)
-                for i, h in enumerate(header):
-                    if "진행" in h: # '진행률', '진행상황' 등 포함되면 채택
+                # 시트 연결 및 수정 로직
+                client = get_spreadsheet()
+                ws = client.worksheet("작업")
+                cell = ws.find(target)
+                
+                # 진행률 열 찾기 (없으면 F열=6번)
+                headers = ws.row_values(1)
+                col_idx = 6
+                for i, h in enumerate(headers):
+                    if "진행" in h: 
                         col_idx = i + 1
                         break
                 
-                # 3. 값 업데이트
-                if "%" not in new_value: new_value += "%"
-                ws.update_cell(cell.row, col_idx, new_value)
-                
-                st.chat_message("assistant").write(f"📈 **'{target_task}'**의 진행률을 **{new_value}**로 업데이트했습니다!")
-                st.rerun()
-                
-            except Exception as e:
-                # 못 찾았을 때만 채팅으로 물어봄
-                st.error(f"수정 실패: {e}")
-                st.chat_message("assistant").write(f"😅 **'{target_task}'** 작업을 시트에서 못 찾겠어요. 이름이 정확한가요?")
+                ws.update_cell(cell.row, col_idx, val)
+                msg = f"📈 **'{target}'** 진행률을 **{val}**로 변경했습니다."
+                st.rerun() # 즉시 반영
 
-        # [D] 일반 대화
-        else:
-            st.chat_message("assistant").write(ai_data.get("response"))
+            # [동작 3] 그 외 (삭제/대화)
+            else:
+                msg = cmd.get("response", "명령을 이해하지 못했습니다.")
 
-    except Exception as e:
-        # JSON 파싱 실패 시 일반 대화
-        response = model.generate_content(prompt)
-        st.chat_message("assistant").write(response.text)
+        except Exception as e:
+            msg = f"오류가 발생했거나 AI가 딴소리를 했습니다: {e}"
+
+        # 4. 결과 출력 및 저장
+        st.session_state.messages.append({"role": "assistant", "content": msg})
+        chat_box.chat_message("assistant").write(msg)
