@@ -558,19 +558,22 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
     # 2. 현재 작업 요약
     task_summary = df_task.iloc[:, 0].tolist() if not df_task.empty else "없음"
 
-    # 3. 시스템 프롬프트 생성
+        # 3. 시스템 프롬프트 생성
     sys_msg = build_system_prompt(task_summary)
 
     try:
         # 4. Gemini 호출
         response = model.generate_content(sys_msg + f"\n사용자 요청: {prompt}")
         text_res = (
-    response.text.strip()
-    .replace("", "")
-    .replace("```", "")
-)
-    if text_res.lower().startswith("json "):
-    text_res = text_res[5:].lstrip()
+            response.text.strip()
+            .replace("", "")
+            .replace("```", "")
+            .strip()
+        )
+
+        # 앞에 "json " 이라는 접두어가 붙어 있을 때 제거
+        if text_res.lower().startswith("json "):
+            text_res = text_res[5:].lstrip()
 
         # 5. JSON 파싱
         cmd = json.loads(text_res)
