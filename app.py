@@ -258,23 +258,30 @@ with c_items:
         col_search, col_filter = st.columns([2, 1])
         
         with col_search:
-            search_item = st.text_input("📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...")
+            search_item = st.text_input("📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...", key="item_search_input")
         
         with col_filter:
-            # 필터링할 열 자동 감지 ('상태', '구분', '구매상태' 중 하나라도 있으면 필터 생성)
+            # 필터링할 열 자동 감지 ('상태', '구분', '구매상태' 등)
             filter_col = next((c for c in ['상태', '구분', '구매상태', 'Status'] if c in df_items.columns), None)
             
             if filter_col:
                 all_opts = df_items[filter_col].unique()
-                selected_opts = st.multiselect(f"🏷️ {filter_col} 필터", all_opts, default=all_opts)
+                # 👇 [핵심 수정] key="item_filter"를 추가해서 작업 탭의 필터와 구분함!
+                selected_opts = st.multiselect(
+                    f"🏷️ {filter_col} 필터", 
+                    all_opts, 
+                    default=all_opts,
+                    key="item_filter_unique"
+                )
             else:
                 selected_opts = []
-                st.caption("🚫 '상태' 열 없음")
+                # 공간 확보를 위해 빈 컨테이너 표시
+                st.empty() 
 
         # 2. 데이터 가공 및 필터링
         df_display = df_items.copy()
         
-        # (1) 필터 적용 (필터 열이 있고, 선택된 값이 있을 때만)
+        # (1) 필터 적용
         if filter_col and selected_opts:
             df_display = df_display[df_display[filter_col].isin(selected_opts)]
 
@@ -286,7 +293,7 @@ with c_items:
             )
             df_display = df_display[mask]
 
-        # 3. 링크 버튼 처리 (자동 감지)
+        # 3. 링크 버튼 처리
         if "구매 링크" not in df_display.columns: df_display["구매 링크"] = None
         if "비고" in df_display.columns:
             for i, row in df_display.iterrows():
@@ -306,10 +313,9 @@ with c_items:
         else:
             st.warning("조건에 맞는 물품이 없습니다.")
 
-        # 5. 총 비용 계산 (검색 및 필터링된 결과 기준)
+        # 5. 총 비용 계산
         cost_cols = [c for c in df_items.columns if any(k in c for k in ['금액', '가격', '비용'])]
         if cost_cols:
-            # 현재 화면에 보이는 항목들의 합계만 계산
             current_cost = df_display[cost_cols[0]].sum()
             
             st.markdown(f"""
