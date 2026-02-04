@@ -566,8 +566,7 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
         response = model.generate_content(sys_msg + f"\n사용자 요청: {prompt}")
         text_res = (
             response.text.strip()
-            .replace("json", "")
-            .replace(")
+            .replace("json", "").replace(")
 
         # 5. JSON 파싱
         cmd = json.loads(text_res)
