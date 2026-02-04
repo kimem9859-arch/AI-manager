@@ -328,21 +328,38 @@ with c_chat:
         for m in st.session_state.messages: st.chat_message(m["role"]).write(m["content"])
 
 # ------------------------------------------------------------------
-# 4. AI 답변 및 액션 처리 (수정됨: 진행률 변경 기능 추가)
+# 4. AI 답변 및 액션 처리 (수정됨: KeyError 완전 해결)
 # ------------------------------------------------------------------
 if prompt := st.chat_input("AI 매니저에게 명령하세요 (예: 3D 모델링 진행률 50%로 변경해줘)"):
     # 1. 사용자 메시지 표시
     st.chat_message("user").write(prompt)
     
-    # 2. AI에게 보낼 시스템 명령 (뇌 개조: update 기능 교육)
-    # AI가 상황을 파악하고 JSON으로 명령을 내리도록 유도합니다.
+    # 2. 데이터 안전하게 가져오기 (이름 몰라도 첫 번째 열 가져옴)
+    # 작업 리스트 추출
+    if not df.empty:
+        # 무조건 첫 번째 열(0번)을 작업 이름으로 간주
+        task_list_str = df.iloc[:, 0].tolist()
+    else:
+        task_list_str = '없음'
+
+    # 물품 리스트 추출
+    if not df_items.empty:
+        # 물품 시트도 무조건 두 번째 열(1번, 보통 품목명)을 가져옴 (없으면 첫 번째)
+        try:
+            item_list_str = df_items.iloc[:, 1].tolist() 
+        except:
+            item_list_str = df_items.iloc[:, 0].tolist()
+    else:
+        item_list_str = '없음'
+
+    # 3. AI에게 보낼 시스템 명령
     system_instruction = f"""
     너는 이 프로젝트의 AI 매니저야. 사용자의 말을 듣고 구글 시트를 관리해야 해.
     사용자의 의도를 파악해서 반드시 아래 **JSON 형식**으로만 대답해. (다른 사족 붙이지 마)
     
     [현재 데이터 현황]
-    - 작업 리스트: {df['작업 내용'].tolist() if not df.empty else '없음'}
-    - 물품 리스트: {df_items['품목명'].tolist() if not df_items.empty else '없음'}
+    - 작업 리스트: {task_list_str}
+    - 물품 리스트: {item_list_str}
 
     [명령어 규칙]
     1. 추가: {{"action": "add", "type": "task/item", "content": "내용", "note": "비고(옵션)"}}
@@ -355,27 +372,26 @@ if prompt := st.chat_input("AI 매니저에게 명령하세요 (예: 3D 모델�
     - "3D 모델링 완료했어(100%)" -> {{"action": "update", "target": "3D 모델링", "value": "100%"}}
     """
     
-    # 3. AI 생각 시키기
+    # 4. AI 생각 시키기
     full_prompt = system_instruction + f"\n사용자: {prompt}"
     
     try:
         response = model.generate_content(full_prompt)
         text_res = response.text.strip()
         
-        # JSON 부분만 억지로 뜯어내기 (가끔 AI가 백틱 ```json ... ``` 을 붙일 때가 있어서)
+        # JSON 부분만 발라내기
         if "```" in text_res:
             text_res = text_res.replace("```json", "").replace("```", "").strip()
             
         import json
-        ai_data = json.loads(text_res) # JSON으로 변환 시도
+        ai_data = json.loads(text_res)
         
-        # 4. AI의 명령 수행 (손 움직이기)
         action = ai_data.get("action")
         
         # [A] 추가 (Add)
         if action == "add":
             if ai_data["type"] == "task":
-                update_sheet_any(conn, "작업", [ai_data["content"], "대기", "", "", "", "0%"]) # 진행률 0% 기본값
+                update_sheet_any(conn, "작업", [ai_data["content"], "대기", "", "", "", "0%"])
                 msg = f"✅ 작업 시트에 **'{ai_data['content']}'** 추가 완료!"
             else:
                 update_sheet_any(conn, "물품", ["", ai_data["content"], "1", "", ""])
@@ -385,48 +401,42 @@ if prompt := st.chat_input("AI 매니저에게 명령하세요 (예: 3D 모델�
 
         # [B] 삭제 (Delete)
         elif action == "delete":
-            # (삭제 로직은 기존과 동일하거나, 필요하면 구현)
             st.chat_message("assistant").write(f"🗑️ **{ai_data['target']}** 삭제 기능은 아직 안전을 위해 막아뒀어요. 시트에서 직접 지워주세요!")
 
-        # [C] ★ 수정 (Update) - 진행률 변경 기능!
+        # [C] 수정 (Update)
         elif action == "update":
             target_task = ai_data.get("target")
             new_value = ai_data.get("value")
             
-            # 1. 시트 연결
-            sh = conn.open("Project_Manager") # 시트 이름 확인하세요!
+            sh = conn.open("Project_Manager") # 파일명 확인!
             ws = sh.worksheet("작업")
             
-            # 2. 해당 작업이 몇 번째 줄에 있는지 찾기
             try:
-                cell = ws.find(target_task) # 작업 이름을 찾음
+                cell = ws.find(target_task)
                 
-                # 3. '진행률' 컬럼이 몇 번째인지 찾기 (보통 6번째 열이지만, 확실하게 하기 위해)
-                # (만약 헤더를 못 찾으면 F열(6번)이라고 가정)
+                # 진행률 열 찾기 (못 찾으면 F열(6번)로 가정)
                 header = ws.row_values(1)
                 try:
-                    col_idx = header.index("진행률") + 1
+                    # '진행률'이라는 글자가 포함된 열 찾기
+                    col_idx = [i for i, h in enumerate(header) if '진행' in h][0] + 1
                 except:
                     col_idx = 6 
                 
-                # 4. 값 업데이트 (퍼센트 기호 없으면 붙여주기)
                 if "%" not in new_value: new_value += "%"
                 
                 ws.update_cell(cell.row, col_idx, new_value)
-                
                 st.chat_message("assistant").write(f"📈 **'{target_task}'**의 진행률을 **{new_value}**로 업데이트했습니다!")
-                st.rerun() # 새로고침해서 색깔 바뀐거 보여줌
+                st.rerun()
                 
             except Exception as e:
-                st.error(f"작업을 찾을 수 없거나 수정 실패: {e}")
-                st.chat_message("assistant").write(f"😅 **'{target_task}'**라는 작업을 못 찾겠어요. 정확한 이름을 말씀해 주세요.")
+                st.error(f"수정 실패: {e}")
+                st.chat_message("assistant").write(f"😅 **'{target_task}'**를 못 찾겠어요.")
 
         # [D] 일반 대화
         else:
             st.chat_message("assistant").write(ai_data.get("response"))
 
     except Exception as e:
-        # JSON 파싱 실패하거나 에러나면 그냥 일반 대화로 처리
-        # st.error(f"에러 로그: {e}") # 디버깅용 (필요하면 주석 해제)
-        response = model.generate_content(prompt) # 그냥 일반 질문으로 다시 던짐
+        # 에러 나면 일반 대화 시도
+        response = model.generate_content(prompt)
         st.chat_message("assistant").write(response.text)
