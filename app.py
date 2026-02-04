@@ -346,38 +346,42 @@ with c_chat:
             st.chat_message(m["role"]).write(m["content"])
 
 # ------------------------------------------------------------------
-# 4. AI 답변 및 액션 처리 (수정됨: 답변이 사라지는 문제 해결)
+# 4. AI 답변 및 액션 처리 (최종: 데이터 분석 능력 탑재)
 # ------------------------------------------------------------------
 if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 개발 추가해줘)"):
     # 1. 사용자 메시지 기록
     st.session_state.messages.append({"role": "user", "content": prompt})
     chat_box.chat_message("user").write(prompt)
 
-    # 2. 데이터 요약
-    task_str = str(df_task.iloc[:, 0].tolist()) if not df_task.empty else "없음"
+    # 2. 현재 데이터 요약 (✨ 수정된 부분: AI에게 모든 정보 제공)
+    if not df_task.empty:
+        # 작업명, 진행률, 상태, 세부내용 컬럼을 모두 텍스트로 변환해서 보여줌
+        # 예: "0 | 프로젝트 기획 | 50% | 진행중..."
+        cols = [c for c in df_task.columns if c in ['작업명', '진행률', '상태', '세부내용']]
+        task_str = df_task[cols].to_string(index=False)
+    else:
+        task_str = "현재 작업 리스트가 비어있습니다."
     
-    # 3. AI 시스템 프롬프트 (최종 통합: 환각방지 + 완료규칙 + 대화기능 + 순서교정)
+    # 3. AI 시스템 프롬프트 (✨ 수정된 부분: 전문적인 분석가로 변신)
     sys_msg = f"""
-    당신은 구글 시트 데이터베이스 관리자이자 프로젝트 매니저입니다.
+    당신은 꼼꼼한 '프로젝트 매니저'입니다.
     사용자의 말을 분석하여 **반드시 JSON 리스트([...])** 형식으로 출력하세요.
 
-    [현재 작업 데이터] {task_str}
+    [현재 프로젝트 현황표]
+    {task_str}
 
-    [절대 규칙]
-    1. **데이터 수정 요청 시:** 'add', 'delete', 'update', 'notice' 명령 JSON 출력.
-    2. **질문, 요약, 분석 요청 시:** 'chat' 명령을 사용하여 답변 JSON 출력.
-    3. **완료 규칙:** "완료", "끝냈어", "했어"는 무조건 'update' (진행률 100%) 명령이다. **절대로 'delete'하지 마라.**
-    4. **환각 방지:** 작업명은 위 [현재 작업 데이터]에 있는 단어만 사용해라. ('라즈베리파이'를 '아두이노'로 맘대로 바꾸지 마라)
-    5. **추가 규칙:** 작업 추가 시 데이터 순서는 반드시 **[작업명, 0%, -, 대기, -]** 여야 한다.
-    6. 설명이나 사족 절대 금지. 오직 JSON 리스트만 출력.
+    [행동 규칙]
+    1. **수정/관리 명령:** 'add', 'delete', 'update', 'notice' 사용.
+    2. **질문/요약 요청:** 'chat' 사용. **단순 나열 금지.** - 진행률(%)을 보고 분석하여 보고할 것. (예: "전체 공정률은 약 30%이며, XX 작업이 지연되고 있습니다.")
+       - 0%인 작업은 '시작 전', 100%는 '완료'로 구분해서 브리핑할 것.
+    3. **완료 규칙:** "완료"는 무조건 100% update (삭제 금지).
+    4. **환각 방지:** 위 현황표에 있는 작업명만 사용할 것.
 
     [출력 포맷 예시]
     [
       {{"action": "add", "sheet": "작업", "row": ["작업명", "0%", "", "대기", ""]}},
       {{"action": "update", "target": "작업명", "value": "100%"}},
-      {{"action": "delete", "target": "작업명"}},
-      {{"action": "notice", "content": "공지내용"}},
-      {{"action": "chat", "response": "현재 진행 중인 작업은..."}}
+      {{"action": "chat", "response": "현재 '기획'은 50% 진행 중이며, '개발'은 아직 착수하지 않았습니다. 전체적으로..."}}
     ]
     """
 
@@ -422,6 +426,7 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
                 ws = client.worksheet("작업")
                 try:
                     cell = ws.find(target)
+                    # 진행률 열 찾기 (동적 탐색)
                     headers = ws.row_values(1)
                     col_idx = 6
                     for i, h in enumerate(headers):
@@ -449,12 +454,12 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
                 update_notice(cmd.get("content"))
                 results.append(f"📢 공지 변경됨")
 
-            # [E] 대화 (요약/질문 답변)
+            # [E] 대화/요약
             elif action == "chat":
                 chat_msg = cmd.get("response")
                 results.append(f"🗣️ {chat_msg}")
 
-        # 4. 결과 출력 및 저장 (새로고침 전 저장 필수!)
+        # 결과 저장 및 새로고침
         if results:
             final_msg = " / ".join(results)
             st.session_state.messages.append({"role": "assistant", "content": final_msg})
