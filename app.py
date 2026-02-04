@@ -569,7 +569,8 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
     .replace("", "")
     .replace("```", "")
 )
-        st.write("🔍 AI RAW 응답:", text_res)
+    if text_res.lower().startswith("json "):
+    text_res = text_res[5:].lstrip()
 
         # 5. JSON 파싱
         cmd = json.loads(text_res)
