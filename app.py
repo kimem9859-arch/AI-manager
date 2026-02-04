@@ -192,38 +192,72 @@ else:
         c_sheet = sub_tab1
         c_items = sub_tab2
 
+# [탭 2] 작업
 with c_sheet:
     if not df.empty:
-        st.dataframe(df, use_container_width=True, height=500)
+        # 1. 색상 스타일 함수 정의 (그라데이션 로직)
+        def color_progress(val):
+            # 값이 없거나 에러나면 투명하게
+            if pd.isna(val) or val == "" or val == "-":
+                return None
+            
+            # 문자열(10%)을 숫자(10)로 변환
+            try:
+                numeric_val = float(str(val).replace('%', '').strip())
+            except:
+                return None
+
+            # 100% 이상이면 파란색 (완료)
+            if numeric_val >= 100:
+                return 'background-color: #2E86C1; color: white; font-weight: bold;'
+            
+            # 0~99% 그라데이션 (빨강 -> 초록)
+            # 숫자가 낮을수록 빨강(Red), 높을수록 초록(Green) 비율을 높임
+            red = int(255 * (100 - numeric_val) / 100)
+            green = int(255 * numeric_val / 100)
+            # 글자색은 검정으로 통일하여 가독성 확보
+            return f'background-color: rgb({red}, {green}, 100); color: black;'
+
+        # 2. 스타일 적용 (진행률 컬럼이 있을 때만)
+        if '진행률' in df.columns:
+            # Pandas의 Style 기능을 사용하여 색 입히기
+            st.dataframe(
+                df.style.map(color_progress, subset=['진행률']), 
+                use_container_width=True, 
+                height=500
+            )
+        else:
+            # 진행률 컬럼이 아직 없으면 그냥 보여주기
+            st.dataframe(df, use_container_width=True, height=500)
+            st.caption("※ 구글 시트에 '진행률' 열을 추가하면 색상이 표시됩니다.")
+            
     else: st.info("작업 데이터가 없습니다.")
 
 # [탭 3] 물품
 with c_items:
-    # 1. 사이드바에 새로고침 버튼을 눌러서 데이터가 갱신되었는지 확인
+    # 1. 데이터가 있는지 확인
     if not df_items.empty:
-        # 보여주기용 데이터 복사
         df_display = df_items.copy()
         
-        # -------------------------------------------------------
-        # [수정 핵심] 링크 데이터 정제 과정
-        # -------------------------------------------------------
-        # 1. '구매 링크' 컬럼 만들기 (없으면 생성)
+        # --- (기존 링크 처리 코드) ---
         if "구매 링크" not in df_display.columns:
             df_display["구매 링크"] = None
 
-        # 2. '비고'란에서 http 주소 추출해서 '구매 링크'로 옮기기
         if "비고" in df_display.columns:
             for i, row in df_display.iterrows():
                 val = str(row["비고"])
                 if val.startswith("http"):
                     df_display.at[i, "구매 링크"] = val
-                    df_display.at[i, "비고"] = "-" # 비고란은 지움
+                    df_display.at[i, "비고"] = "-"
 
-        # 3. ★ 중요 ★: 빈칸이나 '-'로 채워진 가짜 데이터를 진짜 'None(없음)'으로 바꿈
-        # 그래야 Streamlit이 "아, 여긴 링크가 없구나" 하고 버튼을 안 보여줍니다.
-        df_display["구매 링크"] = df_display["구매 링크"].replace({"-": None, "": None, "nan": None})
-        # -------------------------------------------------------
+        # 링크 빈칸 처리
+        cols_to_clean = ["구매 링크"]
+        for col in cols_to_clean:
+            df_display[col] = df_display[col].replace({"-": None, "": None, "nan": None})
+            df_display[col] = df_display[col].where(pd.notnull(df_display[col]), None)
+        # --------------------------
 
+        # 표 출력
         st.dataframe(
             df_display, 
             use_container_width=True, 
@@ -235,9 +269,33 @@ with c_items:
                 )
             }
         )
+
+        # ★ [추가된 기능] 총 비용 계산 및 표시
+        # 시트에 '금액' 열이 있다면 합계를 구함
+        if "금액" in df_items.columns:
+            try:
+                # 콤마(,) 제거하고 숫자로 변환 후 합계 계산
+                total_cost = df_items["금액"].astype(str).str.replace(',', '').apply(pd.to_numeric, errors='coerce').sum()
+                
+                # 멋진 디자인으로 합계 보여주기
+                st.markdown(f"""
+                    <div style="
+                        text-align: right; 
+                        padding: 15px; 
+                        background-color: rgba(100, 255, 100, 0.1); 
+                        border: 1px solid rgba(100, 255, 100, 0.3);
+                        border-radius: 10px; 
+                        margin-top: 10px;">
+                        <span style="font-size: 1.2em; font-weight: bold; margin-right: 10px;">💰 총 예상 비용:</span>
+                        <span style="font-size: 1.8em; color: #28a745; font-weight: bold;">{total_cost:,.0f}원</span>
+                    </div>
+                """, unsafe_allow_html=True)
+            except Exception as e:
+                st.caption(f"비용 계산 중 오류가 발생했습니다: {e}")
+
     else:
         st.info("📦 물품 리스트가 비어있습니다.")
-
+        
 with c_chat:
     if current_notice not in ["-", "공지없음"]:
         st.info(f"📢 **공지:** {current_notice}")
