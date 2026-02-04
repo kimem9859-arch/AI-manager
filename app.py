@@ -56,31 +56,42 @@ def get_spreadsheet():
     
     client = gspread.authorize(creds)
     # ★ 중요: 파일 이름이 맞는지 확인하세요!
-    return client.open("Project_Manager") 
+    return client.open("Safety_Project") 
 
-# [기능] 시트 데이터 가져오기 (헤더 자동 찾기 기능 포함)
+# [수정된 함수] 시트 데이터 가져오기 (강제 로딩 버전)
 def load_data_safe(sheet_name):
     try:
         sh = get_spreadsheet()
         ws = sh.worksheet(sheet_name)
+        
+        # 1. 모든 데이터를 가져옴
         all_values = ws.get_all_values()
         
         # 데이터가 없으면 빈 표 반환
-        if not all_values: return pd.DataFrame()
+        if not all_values: 
+            return pd.DataFrame()
 
-        # 헤더 찾기 (단어 포함 여부로 실제 헤더 위치 추적)
+        # 2. 복잡하게 찾지 말고, 무조건 1행을 제목, 2행부터 데이터로 인식
+        # (만약 1행이 병합되어 있다면 2행을 제목으로 인식하도록 인덱스 조절 가능)
+        
+        # 헤더 후보 찾기 (데이터가 있는 첫 번째 줄을 헤더로 간주)
         header_idx = 0
-        keywords = ['품목', '작업', 'Task', 'Item', '내용']
         for i, row in enumerate(all_values[:5]):
-            if any(k in str(r) for k in keywords for r in row):
+            # 행에 내용이 2개 이상 차 있으면 헤더로 봄
+            if len([x for x in row if x.strip()]) >= 2:
                 header_idx = i
                 break
         
-        # 데이터프레임 생성
-        df = pd.DataFrame(all_values[header_idx+1:], columns=all_values[header_idx])
+        headers = all_values[header_idx]
+        data = all_values[header_idx+1:]
+        
+        df = pd.DataFrame(data, columns=headers)
         return df
-    except:
-        return pd.DataFrame() # 에러나면 빈 표
+
+    except Exception as e:
+        # 에러가 나면 화면에 원인을 출력해줌 (디버깅용)
+        st.error(f"❌ '{sheet_name}' 시트 로딩 실패: {e}")
+        return pd.DataFrame()
 
 # [기능] 시트 업데이트 (범용)
 def update_sheet_any(sheet_name, row_data):
