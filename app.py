@@ -251,16 +251,34 @@ with c_sheet:
     else:
         st.info("작업 리스트가 비어있습니다.")
 
-# --- [탭 2] 물품 리스트 (검색 & 링크 & 비용) ---
+# --- [탭 2] 물품 리스트 (검색 & 필터 & 링크 & 비용) ---
 with c_items:
     if not df_items.empty:
-        # 1. 검색 UI
-        search_item = st.text_input("📦 물품 검색", placeholder="품목명이나 비고 내용을 검색하세요...")
+        # 1. 상단 UI 구성 (검색창 + 상태 필터)
+        col_search, col_filter = st.columns([2, 1])
         
-        # 2. 데이터 필터링 및 가공
+        with col_search:
+            search_item = st.text_input("📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...")
+        
+        with col_filter:
+            # 필터링할 열 자동 감지 ('상태', '구분', '구매상태' 중 하나라도 있으면 필터 생성)
+            filter_col = next((c for c in ['상태', '구분', '구매상태', 'Status'] if c in df_items.columns), None)
+            
+            if filter_col:
+                all_opts = df_items[filter_col].unique()
+                selected_opts = st.multiselect(f"🏷️ {filter_col} 필터", all_opts, default=all_opts)
+            else:
+                selected_opts = []
+                st.caption("🚫 '상태' 열 없음")
+
+        # 2. 데이터 가공 및 필터링
         df_display = df_items.copy()
         
-        # 검색어가 있으면 필터링 (품목명 or 비고)
+        # (1) 필터 적용 (필터 열이 있고, 선택된 값이 있을 때만)
+        if filter_col and selected_opts:
+            df_display = df_display[df_display[filter_col].isin(selected_opts)]
+
+        # (2) 검색어 적용
         if search_item:
             mask = (
                 df_display.iloc[:, 0].astype(str).str.contains(search_item, case=False, na=False) | 
@@ -268,7 +286,7 @@ with c_items:
             )
             df_display = df_display[mask]
 
-        # 3. 링크 버튼 처리
+        # 3. 링크 버튼 처리 (자동 감지)
         if "구매 링크" not in df_display.columns: df_display["구매 링크"] = None
         if "비고" in df_display.columns:
             for i, row in df_display.iterrows():
@@ -286,13 +304,12 @@ with c_items:
                 column_config={"구매 링크": st.column_config.LinkColumn("링크", display_text="🔗 구매")}
             )
         else:
-            st.warning("검색된 물품이 없습니다.")
+            st.warning("조건에 맞는 물품이 없습니다.")
 
-        # 5. 총 비용 계산 (검색된 항목 기준)
+        # 5. 총 비용 계산 (검색 및 필터링된 결과 기준)
         cost_cols = [c for c in df_items.columns if any(k in c for k in ['금액', '가격', '비용'])]
         if cost_cols:
-            # 주의: 전체 총액을 보여줄지, 검색된 것만 보여줄지 결정 (여기선 검색된 것 기준)
-            # 만약 '전체 총액'을 보고 싶으면 df_items를, '검색된 총액'을 보려면 df_display를 사용
+            # 현재 화면에 보이는 항목들의 합계만 계산
             current_cost = df_display[cost_cols[0]].sum()
             
             st.markdown(f"""
