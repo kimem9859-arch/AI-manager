@@ -59,25 +59,18 @@ def get_spreadsheet():
     return client.open("Safety_Project") 
 
 # [수정된 함수] 시트 데이터 가져오기 (강제 로딩 버전)
+@st.cache_data(ttl=5)
 def load_data_safe(sheet_name):
     try:
         sh = get_spreadsheet()
         ws = sh.worksheet(sheet_name)
         
-        # 1. 모든 데이터를 가져옴
         all_values = ws.get_all_values()
-        
-        # 데이터가 없으면 빈 표 반환
-        if not all_values: 
-            return pd.DataFrame()
+        if not all_values: return pd.DataFrame()
 
-        # 2. 복잡하게 찾지 말고, 무조건 1행을 제목, 2행부터 데이터로 인식
-        # (만약 1행이 병합되어 있다면 2행을 제목으로 인식하도록 인덱스 조절 가능)
-        
-        # 헤더 후보 찾기 (데이터가 있는 첫 번째 줄을 헤더로 간주)
+        # 헤더 찾기
         header_idx = 0
         for i, row in enumerate(all_values[:5]):
-            # 행에 내용이 2개 이상 차 있으면 헤더로 봄
             if len([x for x in row if x.strip()]) >= 2:
                 header_idx = i
                 break
@@ -89,16 +82,17 @@ def load_data_safe(sheet_name):
         return df
 
     except Exception as e:
-        # 에러가 나면 화면에 원인을 출력해줌 (디버깅용)
-        st.error(f"❌ '{sheet_name}' 시트 로딩 실패: {e}")
+        # 에러 나면 빈 표 반환 (화면이 터지진 않게 함)
         return pd.DataFrame()
-
+    
 # [기능] 시트 업데이트 (범용)
 def update_sheet_any(sheet_name, row_data):
     try:
         client = get_spreadsheet()
         ws = client.worksheet(sheet_name)
         ws.append_row(row_data)
+
+        st.cache_data.clear()
         return True
     except: return False
 
