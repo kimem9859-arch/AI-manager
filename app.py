@@ -233,13 +233,12 @@ with c_sheet:
             
     else: st.info("작업 데이터가 없습니다.")
 
-# [탭 3] 물품
+# [탭 3] 물품 (수정됨: 비용 계산 기능 강화 + 디버깅)
 with c_items:
-    # 1. 데이터가 있는지 확인
     if not df_items.empty:
         df_display = df_items.copy()
         
-        # --- (기존 링크 처리 코드) ---
+        # --- (1) 링크 처리 로직 (기존 유지) ---
         if "구매 링크" not in df_display.columns:
             df_display["구매 링크"] = None
 
@@ -250,52 +249,63 @@ with c_items:
                     df_display.at[i, "구매 링크"] = val
                     df_display.at[i, "비고"] = "-"
 
-        # 링크 빈칸 처리
         cols_to_clean = ["구매 링크"]
         for col in cols_to_clean:
             df_display[col] = df_display[col].replace({"-": None, "": None, "nan": None})
             df_display[col] = df_display[col].where(pd.notnull(df_display[col]), None)
-        # --------------------------
+        # ------------------------------------
 
-        # 표 출력
+        # --- (2) 표 출력 ---
         st.dataframe(
             df_display, 
             use_container_width=True, 
             height=500,
             column_config={
-                "구매 링크": st.column_config.LinkColumn(
-                    "구매 링크", 
-                    display_text="🔗 바로가기"
-                )
+                "구매 링크": st.column_config.LinkColumn("구매 링크", display_text="🔗 바로가기")
             }
         )
 
-        # ★ [추가된 기능] 총 비용 계산 및 표시
-        # 시트에 '금액' 열이 있다면 합계를 구함
-        if "금액" in df_items.columns:
+        # --- (3) ★ 핵심 수정: 총 비용 계산 로직 ---
+        # '금액'이랑 비슷한 단어가 들어간 열을 다 찾아봅니다. (예: '금액', '총금액', '가격', '비용')
+        possible_cols = [col for col in df_items.columns if any(keyword in col for keyword in ['금액', '가격', '비용'])]
+        
+        if possible_cols:
+            target_col = possible_cols[0] # 찾은 것 중 첫 번째를 사용 (예: '금액')
             try:
-                # 콤마(,) 제거하고 숫자로 변환 후 합계 계산
-                total_cost = df_items["금액"].astype(str).str.replace(',', '').apply(pd.to_numeric, errors='coerce').sum()
+                # 1. 문자열로 변환 -> 2. 콤마(,) 제거 -> 3. '원' 글자 제거 -> 4. 숫자로 변환
+                # (숫자 변환이 안 되는 글자는 0으로 처리)
+                total_cost = (
+                    df_items[target_col]
+                    .astype(str)
+                    .str.replace(',', '')
+                    .str.replace('원', '')
+                    .apply(pd.to_numeric, errors='coerce')
+                    .fillna(0)
+                    .sum()
+                )
                 
-                # 멋진 디자인으로 합계 보여주기
+                # 멋진 UI 표시
                 st.markdown(f"""
                     <div style="
                         text-align: right; 
                         padding: 15px; 
-                        background-color: rgba(100, 255, 100, 0.1); 
-                        border: 1px solid rgba(100, 255, 100, 0.3);
+                        background-color: rgba(40, 167, 69, 0.1); 
+                        border: 1px solid rgba(40, 167, 69, 0.3);
                         border-radius: 10px; 
                         margin-top: 10px;">
-                        <span style="font-size: 1.2em; font-weight: bold; margin-right: 10px;">💰 총 예상 비용:</span>
-                        <span style="font-size: 1.8em; color: #28a745; font-weight: bold;">{total_cost:,.0f}원</span>
+                        <span style="font-size: 1.1em; font-weight: bold; margin-right: 10px; color: #555;">💰 총 예상 비용 ({target_col}):</span>
+                        <span style="font-size: 1.8em; color: #28a745; font-weight: bold;">{int(total_cost):,}원</span>
                     </div>
                 """, unsafe_allow_html=True)
             except Exception as e:
-                st.caption(f"비용 계산 중 오류가 발생했습니다: {e}")
+                st.error(f"계산 중 오류 발생: {e}")
+        else:
+            # 못 찾았으면 왜 못 찾았는지 알려줌 (이게 뜨면 시트 열 이름을 확인하세요!)
+            st.warning(f"⚠️ 비용 계산 불가: 시트에 '금액'이나 '가격'이라고 적힌 열이 없습니다.\n(현재 인식된 열 이름: {list(df_items.columns)})")
 
     else:
         st.info("📦 물품 리스트가 비어있습니다.")
-        
+
 with c_chat:
     if current_notice not in ["-", "공지없음"]:
         st.info(f"📢 **공지:** {current_notice}")
