@@ -195,9 +195,20 @@ with c_sheet:
         st.dataframe(df, use_container_width=True, height=500)
     else: st.info("작업 데이터가 없습니다.")
 
+# [탭 3] 물품
 with c_items:
     if not df_items.empty:
-        st.dataframe(df_items, use_container_width=True, height=500)
+        st.dataframe(
+            df_items, 
+            use_container_width=True, 
+            height=500,
+            column_config={
+                "링크": st.column_config.LinkColumn(
+                    "구매처 링크",             # 표 머리글에 나올 이름
+                    display_text="🔗 바로가기"  # 셀 안에 보여줄 글자
+                )
+            }
+        )
     else:
         st.info("📦 물품 리스트가 비어있습니다.")
 
