@@ -362,32 +362,27 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
     else:
         task_str = "현재 작업 리스트가 비어있습니다."
     
-    # 3. AI 시스템 프롬프트 (사용자 지정 5대 절대 규칙 + 분석 능력 통합)
+    # 3. AI 시스템 프롬프트 (요약 기능 제거 + 5대 절대 규칙 100% 유지)
     sys_msg = f"""
-    당신은 날카로운 통찰력을 가진 '수석 프로젝트 매니저'입니다.
+    당신은 구글 시트 데이터베이스 관리자입니다.
     사용자의 말을 분석하여 **반드시 JSON 리스트([...])** 형식으로 출력하세요.
 
     [현재 프로젝트 데이터]
     {task_str}
 
-    [답변(Chat) 작성 가이드라인]
-    - 질문이나 요약 요청이 들어오면 'chat' 명령을 사용하여 JSON 안에 답변을 담으세요.
-    - 답변은 단순 나열하지 말고, 프로젝트 매니저로서의 분석과 조언을 포함하세요.
-    - (예: "전체 공정률은 20%이며, '하드웨어 구축'이 시급합니다.")
-
-    [절대 규칙]
-    1. 설명이나 인사말 절대 금지. 오직 JSON만 출력. (JSON 코드 블록 제외한 잡담 금지)
+    [절대 규칙] (수정 금지 / 누락 금지)
+    1. 설명이나 인사말 절대 금지. 오직 JSON만 출력. (잡담, 코멘트 일절 금지)
     2. "삭제하고 추가해줘" 같은 복합 명령은 리스트에 2개(여러 개)를 넣을 것.
     3. 작업 추가 시 데이터 순서는 반드시 **[작업명, 0%, -, 대기, -]** 순서여야 함.
     4. **중요: "완료", "끝냈어", "했어"는 무조건 'update' (진행률 100%) 명령이다. 절대로 'delete'하지 마라.**
     5. **중요: 작업명은 위 [현재 프로젝트 데이터]에 있는 단어만 사용해라. '라즈베리파이'를 '아두이노'로 맘대로 바꾸지 마라.**
-    6. 질문/요약 요청 시에는 'chat' 명령을 사용해라.
 
     [출력 포맷 예시]
     [
       {{"action": "add", "sheet": "작업", "row": ["작업명", "0%", "", "대기", ""]}},
       {{"action": "update", "target": "작업명", "value": "100%"}},
-      {{"action": "chat", "response": "현재 '하드웨어 구축'이 0%로 지연되고 있습니다. 우선적으로 착수하시기 바랍니다."}}
+      {{"action": "delete", "target": "작업명"}},
+      {{"action": "notice", "content": "공지내용"}}
     ]
     """
 
@@ -432,7 +427,6 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
                 ws = client.worksheet("작업")
                 try:
                     cell = ws.find(target)
-                    # 진행률 열 찾기 (동적 탐색)
                     headers = ws.row_values(1)
                     col_idx = 6
                     for i, h in enumerate(headers):
@@ -460,18 +454,14 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
                 update_notice(cmd.get("content"))
                 results.append(f"📢 공지 변경됨")
 
-            # [E] 대화/요약
-            elif action == "chat":
-                chat_msg = cmd.get("response")
-                results.append(f"🗣️ {chat_msg}")
-
         # 결과 저장 및 새로고침
         if results:
             final_msg = " / ".join(results)
             st.session_state.messages.append({"role": "assistant", "content": final_msg})
             st.rerun()
         else:
-            final_msg = "🤖 명령을 이해하지 못했습니다."
+            # 명령이 없을 경우 (잡담 시도 등)
+            final_msg = "🤖 저는 데이터 관리 전용 AI입니다. 명령을 내려주세요."
             st.session_state.messages.append({"role": "assistant", "content": final_msg})
             st.rerun()
 
