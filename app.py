@@ -171,57 +171,80 @@ else:
         sub1, sub2 = st.tabs(["📊 작업 현황", "📦 물품 견적"])
         c_sheet, c_items = sub1, sub2
 
-# --- [탭 1] 작업 리스트 (그라데이션 수정됨: 빨강-노랑-초록) ---
+# --- [탭 1] 작업 리스트 (검색 & 필터 & 3색 신호등) ---
 with c_sheet:
     if not df_task.empty:
-        # 3단계 색상 함수 정의 (Red -> Yellow -> Green)
+        # 1. 필터 UI 구성 (검색창과 상태선택을 나란히 배치)
+        col_search, col_filter = st.columns([1, 1])
+        
+        with col_search:
+            search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...")
+        
+        with col_filter:
+            # 상태 컬럼이 있으면 필터 생성, 없으면 빈 리스트
+            all_statuses = df_task['상태'].unique() if '상태' in df_task.columns else []
+            selected_status = st.multiselect("🏷️ 상태 필터", all_statuses, default=all_statuses)
+
+        # 2. 데이터 필터링 로직
+        df_view = df_task.copy()
+        
+        # (1) 상태 필터 적용
+        if '상태' in df_view.columns and selected_status:
+            df_view = df_view[df_view['상태'].isin(selected_status)]
+            
+        # (2) 검색어 적용 (첫 번째 열: 작업명 기준)
+        if search_query:
+            # 대소문자 구분 없이 검색
+            df_view = df_view[df_view.iloc[:, 0].astype(str).str.contains(search_query, case=False, na=False)]
+
+        # 3. 색상 함수 (빨강-노랑-초록)
         def color_progress(val):
             if pd.isna(val) or str(val) in ["", "-"]: return None
             try:
-                # % 기호 제거 및 숫자 변환
                 num = float(str(val).replace('%', '').strip())
-                # 혹시 모를 100% 초과값이나 음수 방지
                 num = max(0, min(100, num))
-
                 if num < 50:
-                    # 0% ~ 49%: 빨강(Red) -> 노랑(Yellow)
-                    # 빨강은 꽉 채우고(255), 초록색을 점점 섞음
                     ratio = num / 50
-                    red = 255
-                    green = int(255 * ratio)
-                    blue = 0
+                    red, green, blue = 255, int(255 * ratio), 0
                 else:
-                    # 50% ~ 100%: 노랑(Yellow) -> 초록(Green)
-                    # 초록은 꽉 채우고(255), 빨강색을 점점 뺌
                     ratio = (num - 50) / 50
-                    red = int(255 * (1 - ratio))
-                    green = 255
-                    blue = 0
+                    red, green, blue = int(255 * (1 - ratio)), 255, 0
                 
-                # 스타일 적용 (글자색은 검정으로 통일하여 가독성 확보)
                 style = f'background-color: rgb({red}, {green}, {blue}); color: black;'
-                
-                # 100% 완료면 글씨 두껍게
-                if num >= 100:
-                    style += ' font-weight: bold;'
-                
+                if num >= 100: style += ' font-weight: bold;'
                 return style
             except: return None
 
-        # 진행률 열이 있으면 색상 적용
-        if '진행률' in df_task.columns:
-            st.dataframe(df_task.style.map(color_progress, subset=['진행률']), use_container_width=True, height=500)
+        # 4. 결과 출력
+        if not df_view.empty:
+            if '진행률' in df_view.columns:
+                st.dataframe(df_view.style.map(color_progress, subset=['진행률']), use_container_width=True, height=500)
+            else:
+                st.dataframe(df_view, use_container_width=True, height=500)
         else:
-            st.dataframe(df_task, use_container_width=True, height=500)
+            st.warning("검색 결과가 없습니다.")
+            
     else:
         st.info("작업 리스트가 비어있습니다.")
-        
-# --- [탭 2] 물품 리스트 (링크 & 비용) ---
+
+# --- [탭 2] 물품 리스트 (검색 & 링크 & 비용) ---
 with c_items:
     if not df_items.empty:
+        # 1. 검색 UI
+        search_item = st.text_input("📦 물품 검색", placeholder="품목명이나 비고 내용을 검색하세요...")
+        
+        # 2. 데이터 필터링 및 가공
         df_display = df_items.copy()
         
-        # 링크 버튼 처리
+        # 검색어가 있으면 필터링 (품목명 or 비고)
+        if search_item:
+            mask = (
+                df_display.iloc[:, 0].astype(str).str.contains(search_item, case=False, na=False) | 
+                df_display["비고"].astype(str).str.contains(search_item, case=False, na=False)
+            )
+            df_display = df_display[mask]
+
+        # 3. 링크 버튼 처리
         if "구매 링크" not in df_display.columns: df_display["구매 링크"] = None
         if "비고" in df_display.columns:
             for i, row in df_display.iterrows():
@@ -230,18 +253,24 @@ with c_items:
                     df_display.at[i, "구매 링크"] = val
                     df_display.at[i, "비고"] = "-"
         
-        # 출력
-        st.dataframe(
-            df_display, 
-            use_container_width=True, 
-            height=400,
-            column_config={"구매 링크": st.column_config.LinkColumn("링크", display_text="🔗 구매")}
-        )
+        # 4. 표 출력
+        if not df_display.empty:
+            st.dataframe(
+                df_display, 
+                use_container_width=True, 
+                height=400,
+                column_config={"구매 링크": st.column_config.LinkColumn("링크", display_text="🔗 구매")}
+            )
+        else:
+            st.warning("검색된 물품이 없습니다.")
 
-        # 총 비용 계산
+        # 5. 총 비용 계산 (검색된 항목 기준)
         cost_cols = [c for c in df_items.columns if any(k in c for k in ['금액', '가격', '비용'])]
         if cost_cols:
-            total_cost = df_items[cost_cols[0]].sum()
+            # 주의: 전체 총액을 보여줄지, 검색된 것만 보여줄지 결정 (여기선 검색된 것 기준)
+            # 만약 '전체 총액'을 보고 싶으면 df_items를, '검색된 총액'을 보려면 df_display를 사용
+            current_cost = df_display[cost_cols[0]].sum()
+            
             st.markdown(f"""
                 <div style="
                     text-align: center; 
@@ -251,8 +280,8 @@ with c_items:
                     border-radius: 15px; 
                     margin-top: 15px;
                     box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                    <span style="font-size: 1.3em; font-weight: bold; color: #555; margin-right: 10px;">💰 총 예상 견적:</span>
-                    <span style="font-size: 2.0em; color: #2ecc71; font-weight: bold;">{int(total_cost):,}원</span>
+                    <span style="font-size: 1.3em; font-weight: bold; color: #555; margin-right: 10px;">💰 견적 합계:</span>
+                    <span style="font-size: 2.0em; color: #2ecc71; font-weight: bold;">{int(current_cost):,}원</span>
                 </div>
             """, unsafe_allow_html=True)
     else:
