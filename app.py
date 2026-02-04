@@ -167,6 +167,8 @@ with st.sidebar:
     st.header("⚙️ 설정")
     is_mobile = st.checkbox("📱 모바일 모드", value=False)
     st.divider()
+    if st.button("🔄 데이터 새로고침", use_container_width=True):
+        st.rerun()
     if st.button("❓ 도움말"): show_guide()
     st.link_button("📂 구글시트 바로가기", "https://docs.google.com/spreadsheets/")
 
@@ -197,15 +199,39 @@ with c_sheet:
 
 # [탭 3] 물품
 with c_items:
+    # 1. 사이드바에 새로고침 버튼을 눌러서 데이터가 갱신되었는지 확인
     if not df_items.empty:
+        # 보여주기용 데이터 복사
+        df_display = df_items.copy()
+        
+        # -------------------------------------------------------
+        # [수정 핵심] 링크 데이터 정제 과정
+        # -------------------------------------------------------
+        # 1. '구매 링크' 컬럼 만들기 (없으면 생성)
+        if "구매 링크" not in df_display.columns:
+            df_display["구매 링크"] = None
+
+        # 2. '비고'란에서 http 주소 추출해서 '구매 링크'로 옮기기
+        if "비고" in df_display.columns:
+            for i, row in df_display.iterrows():
+                val = str(row["비고"])
+                if val.startswith("http"):
+                    df_display.at[i, "구매 링크"] = val
+                    df_display.at[i, "비고"] = "-" # 비고란은 지움
+
+        # 3. ★ 중요 ★: 빈칸이나 '-'로 채워진 가짜 데이터를 진짜 'None(없음)'으로 바꿈
+        # 그래야 Streamlit이 "아, 여긴 링크가 없구나" 하고 버튼을 안 보여줍니다.
+        df_display["구매 링크"] = df_display["구매 링크"].replace({"-": None, "": None, "nan": None})
+        # -------------------------------------------------------
+
         st.dataframe(
-            df_items, 
+            df_display, 
             use_container_width=True, 
             height=500,
             column_config={
-                "링크": st.column_config.LinkColumn(
-                    "구매처 링크",             # 표 머리글에 나올 이름
-                    display_text="🔗 바로가기"  # 셀 안에 보여줄 글자
+                "구매 링크": st.column_config.LinkColumn(
+                    "구매 링크", 
+                    display_text="🔗 바로가기"
                 )
             }
         )
