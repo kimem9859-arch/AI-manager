@@ -106,7 +106,7 @@ def update_notice(text):
 # Gemini 설정
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-2.5-pro')
 
 # ----------------------------------------------------------
 # 3. 데이터 준비
