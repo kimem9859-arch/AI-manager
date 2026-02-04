@@ -171,27 +171,51 @@ else:
         sub1, sub2 = st.tabs(["📊 작업 현황", "📦 물품 견적"])
         c_sheet, c_items = sub1, sub2
 
-# --- [탭 1] 작업 리스트 (그라데이션) ---
+# --- [탭 1] 작업 리스트 (그라데이션 수정됨: 빨강-노랑-초록) ---
 with c_sheet:
     if not df_task.empty:
-        # 색상 함수
+        # 3단계 색상 함수 정의 (Red -> Yellow -> Green)
         def color_progress(val):
             if pd.isna(val) or str(val) in ["", "-"]: return None
             try:
+                # % 기호 제거 및 숫자 변환
                 num = float(str(val).replace('%', '').strip())
-                if num >= 100: return 'background-color: #2E86C1; color: white; font-weight: bold;'
-                red = int(255 * (100 - num) / 100)
-                green = int(255 * num / 100)
-                return f'background-color: rgb({red}, {green}, 100); color: black;'
+                # 혹시 모를 100% 초과값이나 음수 방지
+                num = max(0, min(100, num))
+
+                if num < 50:
+                    # 0% ~ 49%: 빨강(Red) -> 노랑(Yellow)
+                    # 빨강은 꽉 채우고(255), 초록색을 점점 섞음
+                    ratio = num / 50
+                    red = 255
+                    green = int(255 * ratio)
+                    blue = 0
+                else:
+                    # 50% ~ 100%: 노랑(Yellow) -> 초록(Green)
+                    # 초록은 꽉 채우고(255), 빨강색을 점점 뺌
+                    ratio = (num - 50) / 50
+                    red = int(255 * (1 - ratio))
+                    green = 255
+                    blue = 0
+                
+                # 스타일 적용 (글자색은 검정으로 통일하여 가독성 확보)
+                style = f'background-color: rgb({red}, {green}, {blue}); color: black;'
+                
+                # 100% 완료면 글씨 두껍게
+                if num >= 100:
+                    style += ' font-weight: bold;'
+                
+                return style
             except: return None
 
+        # 진행률 열이 있으면 색상 적용
         if '진행률' in df_task.columns:
             st.dataframe(df_task.style.map(color_progress, subset=['진행률']), use_container_width=True, height=500)
         else:
             st.dataframe(df_task, use_container_width=True, height=500)
     else:
         st.info("작업 리스트가 비어있습니다.")
-
+        
 # --- [탭 2] 물품 리스트 (링크 & 비용) ---
 with c_items:
     if not df_items.empty:
