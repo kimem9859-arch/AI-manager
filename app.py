@@ -356,26 +356,28 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
     # 2. 데이터 요약
     task_str = str(df_task.iloc[:, 0].tolist()) if not df_task.empty else "없음"
     
-    # 3. AI 프롬프트 (환각 방지 & 완료 규칙 강화)
+    # 3. AI 시스템 프롬프트 (최종 통합: 환각방지 + 완료규칙 + 대화기능 + 순서교정)
     sys_msg = f"""
-    당신은 구글 시트 데이터베이스 관리자입니다.
+    당신은 구글 시트 데이터베이스 관리자이자 프로젝트 매니저입니다.
     사용자의 말을 분석하여 **반드시 JSON 리스트([...])** 형식으로 출력하세요.
-    여러 명령이 있으면 리스트 안에 여러 객체를 넣으세요.
 
-    [현재 작업 리스트] {task_str}
+    [현재 작업 데이터] {task_str}
 
     [절대 규칙]
-    1. 설명이나 인사말 절대 금지. 오직 JSON만 출력.
-    2. "삭제하고 추가해줘" 같은 복합 명령은 리스트에 2개를 넣을 것.
-    3. 작업 추가 시 데이터 순서는 반드시 **[작업명, 0%, -, 대기, -]** 순서여야 함.
-    4. **중요: "완료", "끝냈어", "했어"는 무조건 'update' (진행률 100%) 명령이다. 절대로 'delete'하지 마라.**
-    5. **중요: 작업명은 위 [현재 작업 리스트]에 있는 단어만 사용해라. '라즈베리파이'를 '아두이노'로 맘대로 바꾸지 마라.**
+    1. **데이터 수정 요청 시:** 'add', 'delete', 'update', 'notice' 명령 JSON 출력.
+    2. **질문, 요약, 분석 요청 시:** 'chat' 명령을 사용하여 답변 JSON 출력.
+    3. **완료 규칙:** "완료", "끝냈어", "했어"는 무조건 'update' (진행률 100%) 명령이다. **절대로 'delete'하지 마라.**
+    4. **환각 방지:** 작업명은 위 [현재 작업 데이터]에 있는 단어만 사용해라. ('라즈베리파이'를 '아두이노'로 맘대로 바꾸지 마라)
+    5. **추가 규칙:** 작업 추가 시 데이터 순서는 반드시 **[작업명, 0%, -, 대기, -]** 여야 한다.
+    6. 설명이나 사족 절대 금지. 오직 JSON 리스트만 출력.
 
-    [출력 포맷]
+    [출력 포맷 예시]
     [
-      {{"action": "delete", "target": "지울작업명"}},
-      {{"action": "add", "sheet": "작업", "row": ["추가할작업명", "0%", "", "대기", ""]}},
-      {{"action": "update", "target": "작업명", "value": "100%"}}
+      {{"action": "add", "sheet": "작업", "row": ["작업명", "0%", "", "대기", ""]}},
+      {{"action": "update", "target": "작업명", "value": "100%"}},
+      {{"action": "delete", "target": "작업명"}},
+      {{"action": "notice", "content": "공지내용"}},
+      {{"action": "chat", "response": "현재 진행 중인 작업은..."}}
     ]
     """
 
@@ -387,8 +389,8 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
         # JSON 추출
         import re
         text_res = text_res.replace("```json", "").replace("```", "").strip()
-        
         match = re.search(r'\[.*\]', text_res, re.DOTALL)
+        
         if match:
             commands = json.loads(match.group())
         else:
@@ -446,19 +448,16 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
             elif action == "notice":
                 update_notice(cmd.get("content"))
                 results.append(f"📢 공지 변경됨")
-            
-            # [E] 대화
-            elif action == "chat":
-                results.append(cmd.get("response"))
 
-        # 4. 결과 출력 및 저장 (여기가 핵심 수정!!)
+            # [E] 대화 (요약/질문 답변)
+            elif action == "chat":
+                chat_msg = cmd.get("response")
+                results.append(f"🗣️ {chat_msg}")
+
+        # 4. 결과 출력 및 저장 (새로고침 전 저장 필수!)
         if results:
             final_msg = " / ".join(results)
-            
-            # 👇 [중요] 새로고침 하기 전에 세션에 기록을 먼저 남김!
             st.session_state.messages.append({"role": "assistant", "content": final_msg})
-            
-            # 즉시 새로고침 (화면 갱신)
             st.rerun()
         else:
             final_msg = "🤖 명령을 이해하지 못했습니다."
@@ -466,7 +465,6 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 
             st.rerun()
 
     except Exception as e:
-        # 에러 메시지도 저장하고 새로고침
         err_msg = f"오류 발생: {e}"
         st.session_state.messages.append({"role": "assistant", "content": err_msg})
         st.rerun()
