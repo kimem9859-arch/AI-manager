@@ -102,6 +102,20 @@ def update_sheet_any(sheet_name, row_data):
         return True
     except: return False
 
+# [기능추가] 공지사항 읽어오기 함수
+def get_notice():
+    try:
+        client = get_spreadsheet()
+        # '공지' 시트가 없으면 만들고, 있으면 읽기
+        try: ws = client.worksheet("공지")
+        except: 
+            ws = client.add_worksheet("공지", 5, 2)
+            ws.update_cell(1, 1, "공지없음")
+        
+        val = ws.cell(1, 1).value
+        return val if val else "공지없음"
+    except: return "공지 연결 실패"
+
 # Gemini 모델 설정
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -290,6 +304,9 @@ with c_items:
 # --- [탭 3] 채팅 및 AI 처리 (여기가 핵심!) ---
 with c_chat:
     # 채팅방 헤더 (제목 + 되돌리기 버튼)
+    current_notice = get_notice()
+    if current_notice not in ["-", "공지없음", "공지 연결 실패"]:
+        st.info(f"📢 **공지:** {current_notice}", icon="📢")
     h_col1, h_col2 = st.columns([1, 0.4])
     h_col1.subheader("💬 AI 매니저")
     if h_col2.button("↩️ 되돌리기", type="primary", use_container_width=True):
