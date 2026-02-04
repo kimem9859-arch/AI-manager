@@ -306,7 +306,7 @@ with c_chat:
     # 채팅방 헤더 (제목 + 되돌리기 버튼)
     current_notice = get_notice()
     if current_notice not in ["-", "공지없음", "공지 연결 실패"]:
-        st.info(f"📢 **공지:** {current_notice}", icon="📢")
+        st.info(f" **공지:** {current_notice}", icon="📢")
     h_col1, h_col2 = st.columns([1, 0.4])
     h_col1.subheader("💬 AI 매니저")
     if h_col2.button("↩️ 되돌리기", type="primary", use_container_width=True):
