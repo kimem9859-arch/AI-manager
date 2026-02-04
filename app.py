@@ -29,6 +29,27 @@ def undo_last_chat():
     else:
         st.toast("⚠️ 취소할 대화 내역이 없습니다.")
 
+# 사용 설명서 팝업
+@st.dialog("📖 사용 설명서")
+def show_guide():
+    st.markdown("""
+    ### 👋 환영합니다!
+    
+    **1. 💬 채팅 비서**
+    작업 관리 & 물품 검색을 도와줍니다.
+    
+    **2. 📊 작업 리스트**
+    할 일 목록을 관리합니다. ('작업' 시트)
+    
+    **3. 📦 물품 리스트**
+    구매 목록을 확인합니다. ('물품' 시트)
+    
+    **4. ↩️ 되돌리기 버튼**
+    채팅창 오른쪽 위의 빨간 버튼을 누르면 마지막 대화를 취소합니다.
+    """)
+    if st.button("닫기", use_container_width=True):
+        st.rerun()
+
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
@@ -108,6 +129,9 @@ def delete_task(task):
 # ----------------------------------------------------------
 # 2. 데이터 로딩
 # ----------------------------------------------------------
+if st.session_state.first_visit:
+    show_guide()
+    st.session_state.first_visit = False
 
 try:
     task_sheet = connect_to_task_sheet()
