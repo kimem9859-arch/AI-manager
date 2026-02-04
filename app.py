@@ -138,10 +138,11 @@ model = genai.GenerativeModel('gemini-2.5-pro')
 df_task = load_data_safe("작업")
 if not df_task.empty and '상태' in df_task.columns:
     total = len(df_task)
-    done = len(df_task[df_task['상태']=='완료'])
     pending = len(df_task[df_task['상태']=='대기'])
+    in_progress = len(df_task[df_task['상태']=='진행중'])
+    done = len(df_task[df_task['상태']=='완료'])
 else:
-    total, done, pending = 0, 0, 0
+    total, pending, in_progress, done = 0, 0, 0, 0
 
 # 물품 데이터 로드
 df_items = load_data_safe("물품")
@@ -179,8 +180,9 @@ with st.sidebar:
 st.markdown(f"""
     <div style="display:flex; justify-content:space-around; background-color:rgba(100,100,100,0.1); padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);">
         <div style="text-align:center;">📌 전체 작업<br><b style="font-size:20px;">{total}</b></div>
-        <div style="text-align:center;">✅ 완료됨<br><b style="font-size:20px; color:#4CAF50;">{done}</b></div>
         <div style="text-align:center;">⏳ 대기중<br><b style="font-size:20px; color:#FF9800;">{pending}</b></div>
+        <div style="text-align:center;">🔄 진행중<br><b style="font-size:20px; color:#2196F3;">{in_progress}</b></div>
+        <div style="text-align:center;">✅ 완료됨<br><b style="font-size:20px; color:#4CAF50;">{done}</b></div>
     </div>
 """, unsafe_allow_html=True)
 
