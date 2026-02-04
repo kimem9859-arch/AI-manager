@@ -219,9 +219,16 @@ with c_items:
         if cost_cols:
             total_cost = df_items[cost_cols[0]].sum()
             st.markdown(f"""
-                <div style="text-align:right; padding:15px; background:rgba(0,200,100,0.1); border-radius:10px;">
-                    <span style="font-size:1.2em; font-weight:bold;">💰 총 견적 비용: </span>
-                    <span style="font-size:1.5em; color:#2ecc71; font-weight:bold;">{int(total_cost):,}원</span>
+                <div style="
+                    text-align: center; 
+                    padding: 20px; 
+                    background-color: rgba(0, 200, 100, 0.1); 
+                    border: 1px solid rgba(0, 200, 100, 0.3);
+                    border-radius: 15px; 
+                    margin-top: 15px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <span style="font-size: 1.3em; font-weight: bold; color: #555; margin-right: 10px;">💰 총 예상 견적:</span>
+                    <span style="font-size: 2.0em; color: #2ecc71; font-weight: bold;">{int(total_cost):,}원</span>
                 </div>
             """, unsafe_allow_html=True)
     else:
