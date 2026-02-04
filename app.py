@@ -116,6 +116,16 @@ def get_notice():
         return val if val else "공지없음"
     except: return "공지 연결 실패"
 
+# [기능추가] 공지사항 업데이트 함수
+def update_notice(text):
+    try:
+        client = get_spreadsheet()
+        try: ws = client.worksheet("공지")
+        except: ws = client.add_worksheet("공지", 5, 2)
+        ws.update_cell(1, 1, text)
+        return True
+    except: return False
+
 # Gemini 모델 설정
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -318,85 +328,94 @@ with c_chat:
         for m in st.session_state.messages:
             st.chat_message(m["role"]).write(m["content"])
 
-    # 사용자 입력 처리
-    if prompt := st.chat_input("명령을 입력하세요 (예: 3D 모델링 50%로 설정해줘)"):
-        # 1. 사용자 메시지 기록
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        chat_box.chat_message("user").write(prompt)
+# 4. 사용자 입력 처리 (공지 수정 기능 추가됨)   
+if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일 회식'으로 변경해줘)"):
+    # 1. 사용자 메시지 기록
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    chat_box.chat_message("user").write(prompt)
 
-        # 2. 현재 데이터 요약 (AI에게 전달용)
-        task_summary = df_task.iloc[:, 0].tolist() if not df_task.empty else "없음"
+    # 2. 현재 데이터 요약
+    task_summary = df_task.iloc[:, 0].tolist() if not df_task.empty else "없음"
+    
+    # 3. AI 시스템 프롬프트 (공지 수정 규칙 추가!)
+    sys_msg = f"""
+    당신은 구글 시트 데이터베이스 관리자입니다.
+    
+    [절대 규칙]
+    1. 당신은 사용자의 말을 듣고 **JSON 데이터만** 출력해야 합니다.
+    2. 절대로 대화하거나, 설명을 덧붙이거나, 문장을 교정하지 마십시오.
+    3. 사용자가 숫자(%)와 함께 "변경", "수정" 등을 말하면 'update' 명령입니다.
+    4. "공지", "공지사항"을 변경하라고 하면 'notice' 명령입니다.
+
+    [현재 작업 목록]
+    {task_summary}
+
+    [출력 가능한 JSON 포맷]
+    - 추가: {{"action": "add", "sheet": "작업/물품", "row": ["내용", "대기", "", "", "", "0%"]}}
+    - 수정: {{"action": "update", "sheet": "작업", "target": "작업명", "value": "50%"}}
+    - 공지: {{"action": "notice", "content": "새로운 공지 내용"}}
+    - 삭제: {{"action": "delete", "target": "..."}}
+    - 대화: {{"action": "chat", "response": "할말"}}
+    
+    [예시]
+    Q: "공지사항 '내일 3시 회의'로 바꿔줘"
+    A: {{"action": "notice", "content": "내일 3시 회의"}}
+    """
+
+    try:
+        # AI에게 요청
+        response = model.generate_content(sys_msg + f"\n사용자 요청: {prompt}")
+        text_res = response.text.strip().replace("```json", "").replace("```", "")
         
-        # 3. AI 시스템 프롬프트 (글짓기 금지 & JSON 강제)
-        sys_msg = f"""
-        당신은 구글 시트 데이터베이스 관리자입니다.
-        
-        [절대 규칙]
-        1. 당신은 사용자의 말을 듣고 **JSON 데이터만** 출력해야 합니다.
-        2. 절대로 대화하거나, 설명을 덧붙이거나, 문장을 교정하지 마십시오.
-        3. 사용자가 숫자(%)와 함께 "변경", "수정", "바꿔" 등을 말하면 무조건 'update' 명령입니다.
+        # JSON 파싱
+        cmd = json.loads(text_res)
+        action = cmd.get("action")
 
-        [현재 작업 목록]
-        {task_summary}
+        # [동작 1] 추가 (Add)
+        if action == "add":
+            sheet_name = cmd.get("sheet", "작업")
+            row_vals = cmd.get("row")
+            update_sheet_any(sheet_name, row_vals)
+            msg = f"✅ **{sheet_name}** 시트에 추가되었습니다."
 
-        [출력 가능한 JSON 포맷]
-        - 추가: {{"action": "add", "sheet": "작업/물품", "row": ["내용", "대기", "", "", "", "0%"]}}
-          (물품일 경우: ["", "내용", "1", "", ""])
-        - 수정: {{"action": "update", "sheet": "작업", "target": "작업명", "value": "50%"}}
-        - 삭제: {{"action": "delete", "target": "..."}}
-        - 대화: {{"action": "chat", "response": "할말"}}
-        
-        [예시]
-        Q: "미선정 물품 50%로 바꿔줘"
-        A: {{"action": "update", "sheet": "작업", "target": "미선정 물품", "value": "50%"}}
-        """
-
-        try:
-            # AI에게 요청
-            response = model.generate_content(sys_msg + f"\n사용자 요청: {prompt}")
-            text_res = response.text.strip().replace("```json", "").replace("```", "")
+        # [동작 2] 수정 (Update)
+        elif action == "update":
+            target = cmd.get("target")
+            val = cmd.get("value")
+            if "%" not in val: val += "%"
             
-            # JSON 파싱
-            cmd = json.loads(text_res)
-            action = cmd.get("action")
-
-            # [동작 1] 추가 (Add)
-            if action == "add":
-                sheet_name = cmd.get("sheet", "작업")
-                row_vals = cmd.get("row")
-                update_sheet_any(sheet_name, row_vals)
-                msg = f"✅ **{sheet_name}** 시트에 추가되었습니다."
-
-            # [동작 2] 수정 (Update)
-            elif action == "update":
-                target = cmd.get("target")
-                val = cmd.get("value")
-                if "%" not in val: val += "%"
-                
-                # 시트 연결 및 수정 로직
-                client = get_spreadsheet()
-                ws = client.worksheet("작업")
+            client = get_spreadsheet()
+            ws = client.worksheet("작업")
+            try:
                 cell = ws.find(target)
-                
-                # 진행률 열 찾기 (없으면 F열=6번)
                 headers = ws.row_values(1)
                 col_idx = 6
                 for i, h in enumerate(headers):
                     if "진행" in h: 
                         col_idx = i + 1
                         break
-                
                 ws.update_cell(cell.row, col_idx, val)
                 msg = f"📈 **'{target}'** 진행률을 **{val}**로 변경했습니다."
+                st.rerun()
+            except:
+                msg = f"😅 **'{target}'** 작업을 찾을 수 없습니다."
+
+        # [동작 3] ★ 공지 수정 (새로 추가된 기능)
+        elif action == "notice":
+            content = cmd.get("content")
+            if update_notice(content):
+                msg = f"📢 공지사항이 업데이트 되었습니다: **{content}**"
                 st.rerun() # 즉시 반영
-
-            # [동작 3] 그 외 (삭제/대화)
             else:
-                msg = cmd.get("response", "명령을 이해하지 못했습니다.")
+                msg = "❌ 공지사항 업데이트에 실패했습니다."
 
-        except Exception as e:
-            msg = f"오류가 발생했거나 AI가 딴소리를 했습니다: {e}"
+        # [동작 4] 그 외
+        else:
+            msg = cmd.get("response", "명령을 이해하지 못했습니다.")
 
-        # 4. 결과 출력 및 저장
-        st.session_state.messages.append({"role": "assistant", "content": msg})
-        chat_box.chat_message("assistant").write(msg)
+    except Exception as e:
+        msg = f"오류가 발생했습니다: {e}"
+
+    # 4. 결과 출력 및 저장
+    st.session_state.messages.append({"role": "assistant", "content": msg})
+    chat_box.chat_message("assistant").write(msg)
