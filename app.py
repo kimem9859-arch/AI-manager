@@ -346,126 +346,186 @@ with c_chat:
             st.chat_message(m["role"]).write(m["content"])
 
 # ------------------------------------------------------------------
-# 4. AI 답변 및 액션 처리 (최종: 데이터 분석 능력 탑재)
+# 4. 사용자 입력 및 명령어 처리 (하이브리드 시스템)
 # ------------------------------------------------------------------
-if prompt := st.chat_input("명령을 입력하세요 (예: 기획 삭제하고 개발 추가해줘)"):
-    # 1. 사용자 메시지 기록
+if prompt := st.chat_input("명령을 입력하세요 (예: /추가 디자인, /완료 기획, /삭제 개발)"):
+    
+    # 사용자 메시지 기록
     st.session_state.messages.append({"role": "user", "content": prompt})
     chat_box.chat_message("user").write(prompt)
 
-    # 2. 현재 데이터 요약 (✨ 수정된 부분: AI에게 모든 정보 제공)
-    if not df_task.empty:
-        # 작업명, 진행률, 상태, 세부내용 컬럼을 모두 텍스트로 변환해서 보여줌
-        # 예: "0 | 프로젝트 기획 | 50% | 진행중..."
-        cols = [c for c in df_task.columns if c in ['작업명', '진행률', '상태', '세부내용']]
-        task_str = df_task[cols].to_string(index=False)
-    else:
-        task_str = "현재 작업 리스트가 비어있습니다."
-    
-    # 3. AI 시스템 프롬프트 (요약 기능 제거 + 5대 절대 규칙 100% 유지)
-    sys_msg = f"""
-    당신은 구글 시트 데이터베이스 관리자입니다.
-    사용자의 말을 분석하여 **반드시 JSON 리스트([...])** 형식으로 출력하세요.
+    # -------------------------------------------------------
+    # [모드 1] 규칙 기반 명령어 처리 (AI 안 거침 = 0.1초 실행)
+    # -------------------------------------------------------
+    if prompt.startswith("/"):
+        try:
+            # 예: "/추가 디자인" -> command="추가", content="디자인"
+            parts = prompt.split(" ", 1)
+            command = parts[0].replace("/", "")
+            content = parts[1] if len(parts) > 1 else ""
+            
+            result_msg = ""
+            
+            # 1. /추가 [작업명]
+            if command == "추가":
+                if content:
+                    # 순서: [작업명, 0%, "", 대기, ""]
+                    new_row = [content, "0%", "", "대기", ""]
+                    update_sheet_any("작업", new_row)
+                    result_msg = f"🚀 **[즉시실행]** '{content}' 작업이 추가되었습니다."
+                else:
+                    result_msg = "⚠️ 추가할 작업명을 입력해주세요. (예: /추가 디자인)"
 
-    [현재 프로젝트 데이터]
-    {task_str}
+            # 2. /삭제 [작업명]
+            elif command == "삭제":
+                if content:
+                    client = get_spreadsheet()
+                    ws = client.worksheet("작업")
+                    try:
+                        cell = ws.find(content)
+                        ws.delete_rows(cell.row)
+                        result_msg = f"🗑️ **[즉시실행]** '{content}' 작업이 삭제되었습니다."
+                    except:
+                        result_msg = f"⚠️ '{content}' 작업을 찾을 수 없습니다."
+                else:
+                    result_msg = "⚠️ 삭제할 작업명을 입력해주세요. (예: /삭제 디자인)"
 
-    [절대 규칙] (수정 금지 / 누락 금지)
-    1. 설명이나 인사말 절대 금지. 오직 JSON만 출력. (잡담, 코멘트 일절 금지)
-    2. "삭제하고 추가해줘" 같은 복합 명령은 리스트에 2개(여러 개)를 넣을 것.
-    3. 작업 추가 시 데이터 순서는 반드시 **[작업명, 0%, -, 대기, -]** 순서여야 함.
-    4. **중요: "완료", "끝냈어", "했어"는 무조건 'update' (진행률 100%) 명령이다. 절대로 'delete'하지 마라.**
-    5. **중요: 작업명은 위 [현재 프로젝트 데이터]에 있는 단어만 사용해라. '라즈베리파이'를 '아두이노'로 맘대로 바꾸지 마라.**
+            # 3. /완료 [작업명]
+            elif command == "완료":
+                if content:
+                    client = get_spreadsheet()
+                    ws = client.worksheet("작업")
+                    try:
+                        cell = ws.find(content)
+                        # 진행률 열 찾기 (동적)
+                        headers = ws.row_values(1)
+                        col_idx = 6
+                        for i, h in enumerate(headers):
+                            if "진행" in h: col_idx = i + 1; break
+                        
+                        ws.update_cell(cell.row, col_idx, "100%")
+                        result_msg = f"✅ **[즉시실행]** '{content}' 상태를 100%로 변경했습니다."
+                    except:
+                        result_msg = f"⚠️ '{content}' 작업을 찾을 수 없습니다."
+                else:
+                    result_msg = "⚠️ 완료 처리할 작업명을 입력해주세요. (예: /완료 기획)"
+            
+            # 4. /공지 [내용]
+            elif command == "공지":
+                update_notice(content)
+                result_msg = f"📢 **[즉시실행]** 공지가 변경되었습니다."
 
-    [출력 포맷 예시]
-    [
-      {{"action": "add", "sheet": "작업", "row": ["작업명", "0%", "", "대기", ""]}},
-      {{"action": "update", "target": "작업명", "value": "100%"}},
-      {{"action": "delete", "target": "작업명"}},
-      {{"action": "notice", "content": "공지내용"}}
-    ]
-    """
-
-    try:
-        # AI 호출
-        response = model.generate_content(sys_msg + f"\n사용자 요청: {prompt}")
-        text_res = response.text.strip()
-        
-        # JSON 추출
-        import re
-        text_res = text_res.replace("```json", "").replace("```", "").strip()
-        match = re.search(r'\[.*\]', text_res, re.DOTALL)
-        
-        if match:
-            commands = json.loads(match.group())
-        else:
-            match_single = re.search(r'\{.*\}', text_res, re.DOTALL)
-            if match_single:
-                commands = [json.loads(match_single.group())]
             else:
-                commands = []
+                result_msg = "❌ 알 수 없는 명령어입니다. (/추가, /삭제, /완료, /공지 만 가능)"
 
-        # 명령 실행
-        results = []
-        for cmd in commands:
-            action = cmd.get("action")
-            
-            # [A] 추가
-            if action == "add":
-                sheet = cmd.get("sheet", "작업")
-                row = cmd.get("row")
-                update_sheet_any(sheet, row)
-                results.append(f"✅ **{sheet}**에 추가됨")
-
-            # [B] 수정
-            elif action == "update":
-                target = cmd.get("target")
-                val = cmd.get("value")
-                if "%" not in val: val += "%"
-                
-                client = get_spreadsheet()
-                ws = client.worksheet("작업")
-                try:
-                    cell = ws.find(target)
-                    headers = ws.row_values(1)
-                    col_idx = 6
-                    for i, h in enumerate(headers):
-                        if "진행" in h: 
-                            col_idx = i + 1; break
-                    ws.update_cell(cell.row, col_idx, val)
-                    results.append(f"📈 **{target}** → {val}")
-                except:
-                    results.append(f"⚠️ **{target}** 찾을 수 없음")
-
-            # [C] 삭제
-            elif action == "delete":
-                target = cmd.get("target")
-                client = get_spreadsheet()
-                ws = client.worksheet("작업")
-                try:
-                    cell = ws.find(target)
-                    ws.delete_rows(cell.row)
-                    results.append(f"🗑️ **{target}** 삭제됨")
-                except:
-                    results.append(f"⚠️ **{target}** 삭제 실패")
-            
-            # [D] 공지
-            elif action == "notice":
-                update_notice(cmd.get("content"))
-                results.append(f"📢 공지 변경됨")
-
-        # 결과 저장 및 새로고침
-        if results:
-            final_msg = " / ".join(results)
-            st.session_state.messages.append({"role": "assistant", "content": final_msg})
+            # 결과 출력 및 새로고침
+            st.session_state.messages.append({"role": "assistant", "content": result_msg})
             st.rerun()
+
+        except Exception as e:
+            st.error(f"명령어 처리 중 오류: {e}")
+
+    # -------------------------------------------------------
+    # [모드 2] AI 지능 처리 (복잡한 말, 요약 등은 AI에게)
+    # -------------------------------------------------------
+    else:
+        # 기존 AI 코드 로직이 여기서부터 시작됩니다.
+        # (기존 task_str 생성 코드)
+        if not df_task.empty:
+            cols = [c for c in df_task.columns if c in ['작업명', '진행률', '상태', '세부내용']]
+            task_str = df_task[cols].to_string(index=False)
         else:
-            # 명령이 없을 경우 (잡담 시도 등)
-            final_msg = "🤖 저는 데이터 관리 전용 AI입니다. 명령을 내려주세요."
-            st.session_state.messages.append({"role": "assistant", "content": final_msg})
-            st.rerun()
+            task_str = "비어있음"
 
-    except Exception as e:
-        err_msg = f"오류 발생: {e}"
-        st.session_state.messages.append({"role": "assistant", "content": err_msg})
-        st.rerun()
+        # (기존 sys_msg 및 모델 호출 코드 - Master Version 유지)
+        sys_msg = f"""
+        당신은 구글 시트 데이터베이스 관리자입니다.
+        사용자의 말을 분석하여 **반드시 JSON 리스트([...])** 형식으로 출력하세요.
+
+        [현재 프로젝트 데이터]
+        {task_str}
+
+        [절대 규칙] (수정 금지 / 누락 금지)
+        1. 설명이나 인사말 절대 금지. 오직 JSON만 출력.
+        2. "삭제하고 추가해줘" 같은 복합 명령은 리스트에 2개(여러 개)를 넣을 것.
+        3. 작업 추가 시 데이터 순서는 반드시 **[작업명, 0%, -, 대기, -]** 순서여야 함.
+        4. **중요: "완료", "끝냈어", "했어"는 무조건 'update' (진행률 100%) 명령이다. 절대로 'delete'하지 마라.**
+        5. **중요: 작업명은 위 [현재 프로젝트 데이터]에 있는 단어만 사용해라.**
+
+        [출력 포맷 예시]
+        [
+          {{"action": "add", "sheet": "작업", "row": ["작업명", "0%", "", "대기", ""]}},
+          {{"action": "update", "target": "작업명", "value": "100%"}},
+          {{"action": "delete", "target": "작업명"}},
+          {{"action": "notice", "content": "공지내용"}}
+        ]
+        """
+
+        try:
+            # AI 호출
+            response = model.generate_content(sys_msg + f"\n사용자 요청: {prompt}")
+            text_res = response.text.strip()
+            
+            # JSON 추출 및 실행 로직 (기존과 동일)
+            import re
+            text_res = text_res.replace("```json", "").replace("```", "").strip()
+            match = re.search(r'\[.*\]', text_res, re.DOTALL)
+            
+            if match:
+                commands = json.loads(match.group())
+            else:
+                match_single = re.search(r'\{.*\}', text_res, re.DOTALL)
+                if match_single:
+                    commands = [json.loads(match_single.group())]
+                else:
+                    commands = []
+
+            results = []
+            for cmd in commands:
+                action = cmd.get("action")
+                if action == "add":
+                    sheet = cmd.get("sheet", "작업")
+                    row = cmd.get("row")
+                    update_sheet_any(sheet, row)
+                    results.append(f"✅ **{sheet}**에 추가됨")
+                elif action == "update":
+                    target = cmd.get("target")
+                    val = cmd.get("value")
+                    if "%" not in val: val += "%"
+                    client = get_spreadsheet()
+                    ws = client.worksheet("작업")
+                    try:
+                        cell = ws.find(target)
+                        headers = ws.row_values(1)
+                        col_idx = 6
+                        for i, h in enumerate(headers):
+                            if "진행" in h: col_idx = i + 1; break
+                        ws.update_cell(cell.row, col_idx, val)
+                        results.append(f"📈 **{target}** → {val}")
+                    except: results.append(f"⚠️ **{target}** 못 찾음")
+                elif action == "delete":
+                    target = cmd.get("target")
+                    client = get_spreadsheet()
+                    ws = client.worksheet("작업")
+                    try:
+                        cell = ws.find(target)
+                        ws.delete_rows(cell.row)
+                        results.append(f"🗑️ **{target}** 삭제됨")
+                    except: results.append(f"⚠️ **{target}** 삭제 실패")
+                elif action == "notice":
+                    update_notice(cmd.get("content"))
+                    results.append(f"📢 공지 변경됨")
+
+            if results:
+                final_msg = " / ".join(results)
+                st.session_state.messages.append({"role": "assistant", "content": final_msg})
+                st.rerun()
+            else:
+                final_msg = "🤖 명령을 이해하지 못했습니다."
+                st.session_state.messages.append({"role": "assistant", "content": final_msg})
+                st.rerun()
+
+        except Exception as e:
+            err_msg = f"오류 발생: {e}"
+            st.session_state.messages.append({"role": "assistant", "content": err_msg})
+            st.rerun()
