@@ -385,8 +385,26 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
         st.session_state.messages.append({"role": "assistant", "content": msg})
         chat_box.chat_message("assistant").write(msg)
     else:
-        # 2. 현재 데이터 요약
+        # 2. 현재 데이터 요약 + 작업 시트 컬럼 순서 (추가 시 행 순서 맞추기용)
         task_summary = df_task.iloc[:, 0].tolist() if not df_task.empty else "없음"
+        task_headers = df_task.columns.tolist() if not df_task.empty else ["작업명", "진행률", "세부내용", "상태", "비고"]
+        # 새 작업 한 행 예시: 시트 컬럼 순서에 맞게 [작업명, 진행률, 세부내용, 상태, 비고] 등 배치
+        def _example_row_for_new_task(headers):
+            row = [""] * len(headers)
+            for i, h in enumerate(headers):
+                if "작업" in h or "명" in h or h == "제목":
+                    row[i] = "프로젝트 기획"
+                    break
+            for i, h in enumerate(headers):
+                if "진행" in h:
+                    row[i] = "0%"
+                    break
+            for i, h in enumerate(headers):
+                if "상태" in h:
+                    row[i] = "대기"
+                    break
+            return row
+        example_add_row = _example_row_for_new_task(task_headers)
         
         # 3. AI 시스템 프롬프트 (공지 수정 규칙 추가!)
         sys_msg = f"""
@@ -399,11 +417,15 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
         4. "공지", "공지사항"을 변경하라고 하면 'notice' 명령입니다.
         5. "삭제", "삭제해줘", "지워줘" 등으로 작업/물품을 없애달라고 하면 'delete' 명령입니다. target에는 삭제할 작업명 또는 품목명(정확한 이름), sheet에는 "작업" 또는 "물품"을 넣습니다.
 
+        [작업 시트 컬럼 순서] (추가 시 row는 이 순서와 반드시 동일하게)
+        {task_headers}
+        - 새 작업 추가 시: 진행률 컬럼에는 "0%", 상태 컬럼에는 "대기", 나머지 빈 칸은 "" 로 채우세요.
+
         [현재 작업 목록]
         {task_summary}
 
         [출력 가능한 JSON 포맷]
-        - 추가: {{"action": "add", "sheet": "작업/물품", "row": ["내용", "대기", "", "", "", "0%"]}}
+        - 추가: {{"action": "add", "sheet": "작업", "row": {example_add_row}}}
         - 수정: {{"action": "update", "sheet": "작업", "target": "작업명", "value": "50%"}}
         - 공지: {{"action": "notice", "content": "새로운 공지 내용"}}
         - 삭제: {{"action": "delete", "sheet": "작업 또는 물품", "target": "삭제할 항목 이름"}}
@@ -414,6 +436,8 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
         A: {{"action": "notice", "content": "내일 3시 회의"}}
         Q: "프로젝트 기획 작업 삭제해줘"
         A: {{"action": "delete", "sheet": "작업", "target": "프로젝트 기획"}}
+        Q: "프로젝트 기획 추가해줘"
+        A: {{"action": "add", "sheet": "작업", "row": {example_add_row}}}
         """
 
         try:
@@ -425,10 +449,17 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
             cmd = json.loads(text_res)
             action = cmd.get("action")
 
-            # [동작 1] 추가 (Add)
+            # [동작 1] 추가 (Add) — 행이 시트 컬럼 수와 맞도록 보정
             if action == "add":
                 sheet_name = cmd.get("sheet", "작업")
-                row_vals = cmd.get("row")
+                row_vals = cmd.get("row") or []
+                if not isinstance(row_vals, list):
+                    row_vals = [str(row_vals)]
+                # 작업 시트면 컬럼 수에 맞춤 (앞에서 맞고, 부족하면 "", 많으면 자름)
+                if sheet_name == "작업" and not df_task.empty:
+                    n_cols = len(df_task.columns)
+                    row_vals = [str(v) if v is not None else "" for v in row_vals[:n_cols]]
+                    row_vals += [""] * (n_cols - len(row_vals))
                 update_sheet_any(sheet_name, row_vals)
                 msg = f"✅ **{sheet_name}** 시트에 추가되었습니다."
 
