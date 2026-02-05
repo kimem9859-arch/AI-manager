@@ -318,50 +318,33 @@ with c_sheet:
             except: 
                 return 0
 
-        # 4. 진행률 색상 결정 함수 (10% 단위, 빨강→노랑→초록→파랑)
-        def get_progress_color(percent):
-            """0~100% 값에 따른 색상 반환"""
+        # 4. 진행률 색상 이모지 결정 함수 (빨강→주황→노랑→초록→파랑)
+        def get_progress_emoji(percent):
+            """0~100% 값에 따른 색상 이모지 반환"""
             percent = max(0, min(100, percent))
             
             if percent >= 100:
-                # 100%: 파란색
-                return "#2196F3"  # 파랑
+                return "🔵"  # 100%: 파랑
             elif percent >= 70:
-                # 70-99%: 초록색 계열
-                return "#4CAF50"  # 초록
+                return "🟢"  # 70-99%: 초록
             elif percent >= 40:
-                # 40-69%: 노란색 계열
-                return "#FFC107"  # 노랑
+                return "🟡"  # 40-69%: 노랑
             elif percent >= 20:
-                # 20-39%: 주황색 계열
-                return "#FF9800"  # 주황
+                return "🟠"  # 20-39%: 주황
             else:
-                # 0-19%: 빨간색 계열
-                return "#F44336"  # 빨강
+                return "🔴"  # 0-19%: 빨강
 
-        # 5. HTML 진행률 게이지 생성 함수
-        def create_progress_html(percent):
-            """색상이 있는 HTML 진행률 바 생성"""
-            percent = max(0, min(100, percent))
-            color = get_progress_color(percent)
-            
-            return f'''
-            <div style="display:flex; align-items:center; gap:8px;">
-                <div style="flex-grow:1; background-color:#e0e0e0; border-radius:10px; height:20px; overflow:hidden;">
-                    <div style="width:{percent}%; height:100%; background-color:{color}; border-radius:10px; transition:width 0.3s;"></div>
-                </div>
-                <span style="min-width:45px; font-weight:bold; color:{color};">{int(percent)}%</span>
-            </div>
-            '''
-
-        # 6. 결과 출력 (상태 빠른 변경 기능 + 색상 진행률 바 포함)
+        # 5. 결과 출력 (상태 빠른 변경 기능 + 테이블 내 색상 진행률 표시)
         if not df_view.empty:
             # 원본 인덱스 저장 (수정 추적용)
             df_view = df_view.reset_index(drop=True)
             
-            # 진행률 숫자 추출 (표시 및 정렬용)
+            # 진행률에 색상 이모지 추가
             if '진행률' in df_view.columns:
-                df_view['_진행률_num'] = df_view['진행률'].apply(get_progress_num)
+                df_view['진행률'] = df_view['진행률'].apply(
+                    lambda x: f"{get_progress_emoji(get_progress_num(x))} {int(get_progress_num(x))}%" 
+                    if pd.notna(x) and str(x).strip() not in ["", "-"] else x
+                )
             
             # 상태 열에 대한 column_config 설정
             col_config = {}
@@ -373,14 +356,11 @@ with c_sheet:
                     required=True
                 )
             
-            # 숨길 열 설정
-            col_config['_진행률_num'] = None
-            
             # data_editor로 표시 (상태 변경 가능)
             edited_df = st.data_editor(
                 df_view,
                 use_container_width=True,
-                height=400,
+                height=500,
                 column_config=col_config,
                 disabled=[col for col in df_view.columns if col != '상태'],  # 상태 열만 편집 가능
                 hide_index=True,
@@ -403,33 +383,8 @@ with c_sheet:
                         else:
                             st.error(f"상태 변경 실패: {err}")
             
-            # 진행률 색상 게이지 바 표시 (HTML)
-            if '진행률' in df_view.columns:
-                st.markdown("---")
-                st.markdown("##### 📊 진행률 게이지")
-                
-                for idx in range(len(df_view)):
-                    task_name = df_view.iloc[idx, 0]
-                    progress = df_view.at[idx, '_진행률_num'] if '_진행률_num' in df_view.columns else 0
-                    
-                    col1, col2 = st.columns([1, 2])
-                    with col1:
-                        st.markdown(f"**{task_name}**")
-                    with col2:
-                        st.markdown(create_progress_html(progress), unsafe_allow_html=True)
-                
-                # 색상 범례
-                st.markdown("""
-                <div style="display:flex; justify-content:center; gap:15px; margin-top:10px; font-size:12px;">
-                    <span>🔴 0-19%</span>
-                    <span>🟠 20-39%</span>
-                    <span>🟡 40-69%</span>
-                    <span>🟢 70-99%</span>
-                    <span>🔵 100%</span>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.caption("💡 상태를 클릭하면 드롭다운으로 빠르게 변경할 수 있습니다!")
+            # 색상 범례
+            st.caption("💡 진행률: 🔴 0-19% | 🟠 20-39% | 🟡 40-69% | 🟢 70-99% | 🔵 100%  /  상태를 클릭하면 드롭다운으로 빠르게 변경!")
         else:
             st.warning("검색 결과가 없습니다.")
             
