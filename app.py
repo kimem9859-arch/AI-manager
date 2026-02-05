@@ -309,50 +309,17 @@ with c_sheet:
             # 대소문자 구분 없이 검색
             df_view = df_view[df_view.iloc[:, 0].astype(str).str.contains(search_query, case=False, na=False)]
 
-        # 3. 진행률에서 숫자 추출 함수
-        def get_progress_num(val):
-            if pd.isna(val) or str(val) in ["", "-"]: 
-                return 0
-            try:
-                return float(str(val).replace('%', '').strip())
-            except: 
-                return 0
-
-        # 4. 진행률 게이지 바 생성 함수 (작은 블록 문자 사용)
-        def create_gauge_bar(percent):
-            """0~100% 값에 따른 컴팩트 게이지 바 반환"""
-            percent = max(0, min(100, percent))
-            
-            # 10칸 기준 게이지 (작은 블록 문자)
-            filled = int(percent / 10)
-            empty = 10 - filled
-            
-            # 색상 이모지 결정 (작은 원형)
-            if percent >= 100:
-                color = "🔵"  # 파랑
-            elif percent >= 70:
-                color = "🟢"  # 초록
-            elif percent >= 40:
-                color = "🟡"  # 노랑
-            elif percent >= 20:
-                color = "🟠"  # 주황
-            else:
-                color = "🔴"  # 빨강
-            
-            # 작은 블록 문자로 게이지 바 생성
-            gauge = "█" * filled + "░" * empty
-            return f"{color} {gauge} {int(percent)}%"
-
-        # 5. 결과 출력 (상태 빠른 변경 기능 + 테이블 내 게이지 바 표시)
+        # 3. 결과 출력 (상태 빠른 변경 기능 + ProgressColumn 게이지 바)
         if not df_view.empty:
             # 원본 인덱스 저장 (수정 추적용)
             df_view = df_view.reset_index(drop=True)
             
-            # 진행률을 게이지 바로 변환
+            # 진행률 숫자 변환 (ProgressColumn용 - 0~100 범위)
             if '진행률' in df_view.columns:
-                df_view['진행률'] = df_view['진행률'].apply(
-                    lambda x: create_gauge_bar(get_progress_num(x))
-                    if pd.notna(x) and str(x).strip() not in ["", "-"] else x
+                df_view['진행률_바'] = df_view['진행률'].apply(
+                    lambda x: float(str(x).replace('%', '').strip()) 
+                    if pd.notna(x) and str(x).replace('%', '').strip().replace('.', '').isdigit() 
+                    else 0
                 )
             
             # 상태 열에 대한 column_config 설정
@@ -364,6 +331,18 @@ with c_sheet:
                     options=STATUS_OPTIONS,
                     required=True
                 )
+            
+            # 진행률 프로그레스 바 표시
+            if '진행률_바' in df_view.columns:
+                col_config['진행률_바'] = st.column_config.ProgressColumn(
+                    "진행률",
+                    help="진행률 바 (0% ~ 100%)",
+                    min_value=0,
+                    max_value=100,
+                    format="%d%%"
+                )
+                # 원래 진행률 열 숨기기
+                col_config['진행률'] = None
             
             # data_editor로 표시 (상태 변경 가능)
             edited_df = st.data_editor(
@@ -392,8 +371,8 @@ with c_sheet:
                         else:
                             st.error(f"상태 변경 실패: {err}")
             
-            # 색상 범례
-            st.caption("💡 진행률: 🔴 0-19% | 🟠 20-39% | 🟡 40-69% | 🟢 70-99% | 🔵 100%  /  상태 클릭 시 드롭다운으로 변경 가능")
+            # 안내 문구
+            st.caption("💡 상태를 클릭하면 드롭다운으로 빠르게 변경할 수 있습니다!")
         else:
             st.warning("검색 결과가 없습니다.")
             
