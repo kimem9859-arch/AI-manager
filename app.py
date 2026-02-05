@@ -311,17 +311,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 제목 (스타일 적용)
-st.markdown("""
-<h1 style="font-family: 'Segoe UI', 'Arial', sans-serif; font-weight: 700; letter-spacing: -1px; margin-top: 0px; margin-bottom: 10px;">
-    Project Manager
-</h1>
-""", unsafe_allow_html=True)
-
-# 공지사항 (상단 배치)
+# 제목 + 공지사항 (같은 행에 배치)
 current_notice = get_notice()
+notice_html = ""
 if current_notice not in ["-", "공지없음", "공지 연결 실패", ""]:
-    st.info(f"**📢 공지:** {current_notice}")
+    notice_html = f'<div style="background-color:rgba(30,136,229,0.15); padding:8px 15px; border-radius:8px; border-left:4px solid #1E88E5; font-size:0.9em;">📢 {current_notice}</div>'
+
+st.markdown(f"""
+<div style="display:flex; justify-content:space-between; align-items:center; margin-top:0px; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+    <h1 style="font-family: 'Segoe UI', 'Arial', sans-serif; font-weight: 700; letter-spacing: -1px; margin:0;">Project Manager</h1>
+    {notice_html}
+</div>
+""", unsafe_allow_html=True)
 
 # 사이드바
 with st.sidebar:
