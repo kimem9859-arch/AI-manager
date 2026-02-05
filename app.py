@@ -420,9 +420,14 @@ with tab_sheet:
             # 모바일 모드: 검색, 상위작업, 상태 필터를 한 줄에 강제 가로 배치
             st.markdown("""
             <style>
-            [data-testid="column"] {
+            [data-testid="stHorizontalBlock"] {
+                flex-wrap: nowrap !important;
+                gap: 0.5rem !important;
+            }
+            [data-testid="stHorizontalBlock"] > div[data-testid="column"] {
                 min-width: 0 !important;
-                flex: 1 !important;
+                flex: 1 1 0 !important;
+                width: 33.33% !important;
             }
             </style>
             """, unsafe_allow_html=True)
