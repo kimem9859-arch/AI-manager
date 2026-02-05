@@ -403,30 +403,39 @@ with tab_sheet:
         </style>
         """, unsafe_allow_html=True)
         
-        # 1. 필터 UI 구성 (가로 배치)
-        # 검색창: 절반 너비
-        col_search, col_empty = st.columns([1, 1])
-        with col_search:
-            search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
+        # 1. 필터 UI 구성
+        # 상위 작업 옵션 미리 계산
+        if '상위 작업' in df_task.columns:
+            all_upper = [s for s in df_task['상위 작업'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
+        else:
+            all_upper = []
         
-        # 상위 작업 / 상태 필터 (가로 배치)
-        col_upper, col_status = st.columns([1, 1])
+        # 상태 옵션 미리 계산
+        if '상태' in df_task.columns:
+            all_statuses = [s for s in df_task['상태'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
+        else:
+            all_statuses = []
         
-        # 상위 작업 필터
-        with col_upper:
-            if '상위 작업' in df_task.columns:
-                all_upper = [s for s in df_task['상위 작업'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
-            else:
-                all_upper = []
-            selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
-        
-        # 상태 필터
-        with col_status:
-            if '상태' in df_task.columns:
-                all_statuses = [s for s in df_task['상태'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
-            else:
-                all_statuses = []
-            selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
+        if is_mobile:
+            # 모바일 모드: 검색, 상위작업, 상태 필터를 한 줄에 배치
+            col_search, col_upper, col_status = st.columns([1, 1, 1])
+            with col_search:
+                search_query = st.text_input("🔍 검색", placeholder="작업명...", key="task_search", label_visibility="collapsed")
+            with col_upper:
+                selected_upper = st.multiselect("📂 상위", all_upper, default=list(all_upper), key="filter_upper", placeholder="상위 작업", label_visibility="collapsed")
+            with col_status:
+                selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="상태", label_visibility="collapsed")
+        else:
+            # PC 모드: 기존 레이아웃
+            col_search, col_empty = st.columns([1, 1])
+            with col_search:
+                search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
+            
+            col_upper, col_status = st.columns([1, 1])
+            with col_upper:
+                selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
+            with col_status:
+                selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
 
         # 2. 데이터 필터링 로직
         df_view = df_task.copy()
