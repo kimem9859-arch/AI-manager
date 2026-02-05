@@ -322,7 +322,7 @@ with c_sheet:
         st.markdown("""
         <style>
         [data-testid="stTextInput"] {
-            margin-top: -10px;
+            margin-top: -20px;
             margin-bottom: -10px;
         }
         [data-testid="stTextInput"] > div > div > input {
@@ -331,10 +331,6 @@ with c_sheet:
         }
         [data-testid="stTextInput"] > label {
             font-size: 0.9em;
-        }
-        [data-testid="stMultiSelect"] {
-            margin-top: -10px;
-            margin-bottom: -5px;
         }
         [data-testid="stMultiSelect"] > div {
             font-size: 0.9em;
