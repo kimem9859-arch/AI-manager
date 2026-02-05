@@ -409,7 +409,7 @@ with tab_sheet:
                 all_upper = [s for s in df_task['상위 작업'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
             else:
                 all_upper = []
-            selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper")
+            selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
         
         # 상태 필터
         with col_status:
@@ -417,7 +417,7 @@ with tab_sheet:
                 all_statuses = [s for s in df_task['상태'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
             else:
                 all_statuses = []
-            selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status")
+            selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
 
         # 2. 데이터 필터링 로직
         df_view = df_task.copy()
@@ -552,7 +552,8 @@ with tab_items:
                 f"🏷️ {filter_col} 필터", 
                 all_opts, 
                 default=all_opts,
-                key="item_filter_unique"
+                key="item_filter_unique",
+                placeholder="필터 선택"
             )
         else:
             selected_opts = [] 
