@@ -311,33 +311,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 모바일 모드: 상단 카드 제외 모든 글자 크기 10% 축소
-if is_mobile:
-    st.markdown("""
-    <style>
-        /* 탭, 테이블, expander 등 글자 크기 축소 */
-        [data-testid="stTabs"] {
-            font-size: 0.9em !important;
-        }
-        [data-testid="stExpander"] {
-            font-size: 0.9em !important;
-        }
-        [data-testid="stDataFrame"] {
-            font-size: 0.9em !important;
-        }
-        [data-testid="stCaption"] {
-            font-size: 0.8em !important;
-        }
-        .stDataFrame td, .stDataFrame th {
-            font-size: 0.85em !important;
-        }
-        /* 버튼 글자 */
-        button {
-            font-size: 0.9em !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
 # 제목 + 공지사항 (같은 행에 배치)
 current_notice = get_notice()
 notice_html = ""
@@ -397,6 +370,33 @@ if upper_task_progress:
             with gauge_cols[col_idx]:
                 st.caption(f"📂 {upper_name}")
                 st.progress(progress_int / 100, text=f"{progress_int}%")
+
+# 모바일 모드: 상단 카드 제외 모든 글자 크기 10% 축소
+if is_mobile:
+    st.markdown("""
+    <style>
+        /* 탭, 테이블, expander 등 글자 크기 축소 */
+        [data-testid="stTabs"] {
+            font-size: 0.9em !important;
+        }
+        [data-testid="stExpander"] {
+            font-size: 0.9em !important;
+        }
+        [data-testid="stDataFrame"] {
+            font-size: 0.9em !important;
+        }
+        [data-testid="stCaption"] {
+            font-size: 0.8em !important;
+        }
+        .stDataFrame td, .stDataFrame th {
+            font-size: 0.85em !important;
+        }
+        /* 버튼 글자 */
+        button {
+            font-size: 0.9em !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
 # 탭 구성 (채팅창 제거, 전체 너비 사용)
 tab_sheet, tab_items = st.tabs(["📊 작업 현황", "📦 물품 견적"])
