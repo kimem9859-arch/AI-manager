@@ -309,36 +309,59 @@ with c_sheet:
             # 대소문자 구분 없이 검색
             df_view = df_view[df_view.iloc[:, 0].astype(str).str.contains(search_query, case=False, na=False)]
 
-        # 3. 색상 함수 (빨강-노랑-초록)
-        def color_progress(val):
-            if pd.isna(val) or str(val) in ["", "-"]: return None
+        # 3. 진행률에서 숫자 추출 함수
+        def get_progress_num(val):
+            if pd.isna(val) or str(val) in ["", "-"]: 
+                return 0
             try:
-                num = float(str(val).replace('%', '').strip())
-                num = max(0, min(100, num))
-                if num < 50:
-                    ratio = num / 50
-                    red, green, blue = 255, int(255 * ratio), 0
-                else:
-                    ratio = (num - 50) / 50
-                    red, green, blue = int(255 * (1 - ratio)), 255, 0
-                
-                style = f'background-color: rgb({red}, {green}, {blue}); color: black;'
-                if num >= 100: style += ' font-weight: bold;'
-                return style
-            except: return None
+                return float(str(val).replace('%', '').strip())
+            except: 
+                return 0
 
-        # 4. 결과 출력 (상태 빠른 변경 기능 포함)
+        # 4. 진행률 색상 결정 함수 (10% 단위, 빨강→노랑→초록→파랑)
+        def get_progress_color(percent):
+            """0~100% 값에 따른 색상 반환"""
+            percent = max(0, min(100, percent))
+            
+            if percent >= 100:
+                # 100%: 파란색
+                return "#2196F3"  # 파랑
+            elif percent >= 70:
+                # 70-99%: 초록색 계열
+                return "#4CAF50"  # 초록
+            elif percent >= 40:
+                # 40-69%: 노란색 계열
+                return "#FFC107"  # 노랑
+            elif percent >= 20:
+                # 20-39%: 주황색 계열
+                return "#FF9800"  # 주황
+            else:
+                # 0-19%: 빨간색 계열
+                return "#F44336"  # 빨강
+
+        # 5. HTML 진행률 게이지 생성 함수
+        def create_progress_html(percent):
+            """색상이 있는 HTML 진행률 바 생성"""
+            percent = max(0, min(100, percent))
+            color = get_progress_color(percent)
+            
+            return f'''
+            <div style="display:flex; align-items:center; gap:8px;">
+                <div style="flex-grow:1; background-color:#e0e0e0; border-radius:10px; height:20px; overflow:hidden;">
+                    <div style="width:{percent}%; height:100%; background-color:{color}; border-radius:10px; transition:width 0.3s;"></div>
+                </div>
+                <span style="min-width:45px; font-weight:bold; color:{color};">{int(percent)}%</span>
+            </div>
+            '''
+
+        # 6. 결과 출력 (상태 빠른 변경 기능 + 색상 진행률 바 포함)
         if not df_view.empty:
             # 원본 인덱스 저장 (수정 추적용)
             df_view = df_view.reset_index(drop=True)
             
-            # 진행률 숫자 변환 (ProgressColumn용)
+            # 진행률 숫자 추출 (표시 및 정렬용)
             if '진행률' in df_view.columns:
-                df_view['진행률_숫자'] = df_view['진행률'].apply(
-                    lambda x: float(str(x).replace('%', '').strip()) / 100 
-                    if pd.notna(x) and str(x).replace('%', '').strip().replace('.', '').isdigit() 
-                    else 0
-                )
+                df_view['_진행률_num'] = df_view['진행률'].apply(get_progress_num)
             
             # 상태 열에 대한 column_config 설정
             col_config = {}
@@ -350,23 +373,14 @@ with c_sheet:
                     required=True
                 )
             
-            # 진행률 프로그레스 바 표시 (조건부 서식 대체)
-            if '진행률_숫자' in df_view.columns:
-                col_config['진행률_숫자'] = st.column_config.ProgressColumn(
-                    "진행률",
-                    help="진행률 바 (0% ~ 100%)",
-                    min_value=0,
-                    max_value=1,
-                    format="%.0f%%"
-                )
-                # 원래 진행률 열 숨기기
-                col_config['진행률'] = None
+            # 숨길 열 설정
+            col_config['_진행률_num'] = None
             
             # data_editor로 표시 (상태 변경 가능)
             edited_df = st.data_editor(
                 df_view,
                 use_container_width=True,
-                height=500,
+                height=400,
                 column_config=col_config,
                 disabled=[col for col in df_view.columns if col != '상태'],  # 상태 열만 편집 가능
                 hide_index=True,
@@ -389,7 +403,32 @@ with c_sheet:
                         else:
                             st.error(f"상태 변경 실패: {err}")
             
-            # 진행률 색상 표시 안내
+            # 진행률 색상 게이지 바 표시 (HTML)
+            if '진행률' in df_view.columns:
+                st.markdown("---")
+                st.markdown("##### 📊 진행률 게이지")
+                
+                for idx in range(len(df_view)):
+                    task_name = df_view.iloc[idx, 0]
+                    progress = df_view.at[idx, '_진행률_num'] if '_진행률_num' in df_view.columns else 0
+                    
+                    col1, col2 = st.columns([1, 2])
+                    with col1:
+                        st.markdown(f"**{task_name}**")
+                    with col2:
+                        st.markdown(create_progress_html(progress), unsafe_allow_html=True)
+                
+                # 색상 범례
+                st.markdown("""
+                <div style="display:flex; justify-content:center; gap:15px; margin-top:10px; font-size:12px;">
+                    <span>🔴 0-19%</span>
+                    <span>🟠 20-39%</span>
+                    <span>🟡 40-69%</span>
+                    <span>🟢 70-99%</span>
+                    <span>🔵 100%</span>
+                </div>
+                """, unsafe_allow_html=True)
+            
             st.caption("💡 상태를 클릭하면 드롭다운으로 빠르게 변경할 수 있습니다!")
         else:
             st.warning("검색 결과가 없습니다.")
