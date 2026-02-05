@@ -432,12 +432,11 @@ with tab_sheet:
             </style>
             """, unsafe_allow_html=True)
         else:
-            # PC 모드: 기존 스타일
+            # PC 모드: 수평 정렬 맞춤
             st.markdown("""
             <style>
-            [data-testid="stTextInput"] {
-                margin-top: -20px;
-                margin-bottom: -10px;
+            [data-testid="stHorizontalBlock"] {
+                align-items: flex-end !important;
             }
             [data-testid="stTextInput"] > div > div > input {
                 font-size: 0.9em;
