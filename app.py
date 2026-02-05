@@ -550,7 +550,7 @@ with c_chat:
             st.chat_message(m["role"]).write(m["content"])
 
 # 4. 사용자 입력 처리 (공지 수정 기능 추가됨)   
-if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일 회식'으로 변경해줘)"):
+if prompt := st.chat_input("명령을 입력하세요"):
     # 1. 사용자 메시지 기록
     st.session_state.messages.append({"role": "user", "content": prompt})
     chat_box.chat_message("user").write(prompt)
