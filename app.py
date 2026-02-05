@@ -16,17 +16,6 @@ st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖",
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# [기능] 방금 대화 취소 (Undo)
-def undo_last_chat():
-    if len(st.session_state.messages) >= 2:
-        st.session_state.messages.pop() # AI 답변 삭제
-        st.session_state.messages.pop() # 내 질문 삭제
-        st.toast("↩️ 방금 대화를 취소했습니다!", icon="🗑️")
-        time.sleep(0.5)
-        st.rerun()
-    else:
-        st.toast("⚠️ 취소할 대화 내역이 없습니다.")
-
 # [기능] 사용 설명서
 @st.dialog("📖 사용 설명서", width="large")
 def show_guide():
@@ -89,7 +78,6 @@ def show_guide():
         with col2:
             st.markdown("### ⚡ 편의 기능")
             st.markdown("""
-            - ↩️ **되돌리기**: 채팅 우측 상단 버튼
             - 🔄 **자동 새로고침**: 데이터 변경 시 즉시 반영
             """)
 
@@ -496,14 +484,11 @@ with c_items:
 
 # --- [탭 3] 채팅 및 AI 처리 (여기가 핵심!) ---
 with c_chat:
-    # 채팅방 헤더 (제목 + 되돌리기 버튼)
+    # 채팅방 헤더
     current_notice = get_notice()
     if current_notice not in ["-", "공지없음", "공지 연결 실패"]:
         st.info(f" **공지:** {current_notice}", icon="📢")
-    h_col1, h_col2 = st.columns([1, 0.4])
-    h_col1.subheader("💬 AI 매니저")
-    if h_col2.button("↩️ 되돌리기", type="primary", use_container_width=True):
-        undo_last_chat()
+    st.subheader("💬 AI 매니저")
 
     # 대화 기록 표시
     chat_box = st.container(height=500, border=True)
