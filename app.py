@@ -298,7 +298,7 @@ st.markdown(f"""
     <div style="display:flex; justify-content:space-around; background-color:rgba(100,100,100,0.1); padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);">
         <div style="text-align:center;">📌 전체 작업<br><b style="font-size:20px;">{total}</b></div>
         <div style="text-align:center;">⏳ 대기/보류<br><b style="font-size:20px; color:#FF9800;">{pending}</b></div>
-        <div style="text-align:center;">🔄 진행<br><b style="font-size:20px; color:#2196F3;">{in_progress}</b></div>
+        <div style="text-align:center;">▶️ 진행<br><b style="font-size:20px; color:#2196F3;">{in_progress}</b></div>
         <div style="text-align:center;">🔍 수정/검토<br><b style="font-size:20px; color:#9C27B0;">{reviewing}</b></div>
         <div style="text-align:center;">✅ 완료<br><b style="font-size:20px; color:#4CAF50;">{done}</b></div>
     </div>
@@ -318,14 +318,28 @@ else:
 # --- [탭 1] 작업 리스트 (검색 & 필터 & 3색 신호등 & 상태 빠른 변경) ---
 with c_sheet:
     if not df_task.empty:
-        # 필터 UI 크기 축소 스타일
+        # 필터 UI 크기 축소 및 위치 조정 스타일
         st.markdown("""
         <style>
+        [data-testid="stTextInput"] {
+            margin-top: -10px;
+            margin-bottom: -10px;
+        }
         [data-testid="stTextInput"] > div > div > input {
             font-size: 0.9em;
-            padding: 0.4rem 0.6rem;
+            padding: 0.35rem 0.5rem;
+        }
+        [data-testid="stTextInput"] > label {
+            font-size: 0.9em;
+        }
+        [data-testid="stMultiSelect"] {
+            margin-top: -10px;
+            margin-bottom: -5px;
         }
         [data-testid="stMultiSelect"] > div {
+            font-size: 0.9em;
+        }
+        [data-testid="stMultiSelect"] > label {
             font-size: 0.9em;
         }
         [data-testid="stMultiSelect"] span {
