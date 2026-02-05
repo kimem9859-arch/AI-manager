@@ -408,45 +408,11 @@ with tab_sheet:
             all_statuses = []
         
         if is_mobile:
-            # 모바일 모드: 검색, 상위작업, 상태 필터를 한 줄에 강제 가로 배치 + 크기 축소
-            st.markdown("""
-            <style>
-            [data-testid="stHorizontalBlock"] {
-                flex-wrap: nowrap !important;
-                gap: 0.3rem !important;
-            }
-            [data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-                min-width: 0 !important;
-                flex: 1 1 0 !important;
-                width: 33.33% !important;
-            }
-            /* 모바일 입력창 크기 축소 */
-            [data-testid="stTextInput"] input {
-                font-size: 0.7em !important;
-                padding: 0.3rem 0.4rem !important;
-                height: 2rem !important;
-            }
-            [data-testid="stMultiSelect"] {
-                font-size: 0.7em !important;
-            }
-            [data-testid="stMultiSelect"] > div {
-                min-height: 2rem !important;
-            }
-            [data-testid="stMultiSelect"] span {
-                font-size: 0.65em !important;
-            }
-            [data-testid="stMultiSelect"] input {
-                font-size: 0.7em !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            col_search, col_upper, col_status = st.columns(3)
-            with col_search:
-                search_query = st.text_input("🔍", placeholder="검색", key="task_search", label_visibility="collapsed")
-            with col_upper:
-                selected_upper = st.multiselect("📂", all_upper, default=list(all_upper), key="filter_upper", placeholder="상위", label_visibility="collapsed")
-            with col_status:
-                selected_status = st.multiselect("🏷️", all_statuses, default=list(all_statuses), key="filter_status", placeholder="상태", label_visibility="collapsed")
+            # 모바일 모드: 검색/필터를 접기/펼치기 가능하게
+            with st.expander("🔍 검색 및 필터", expanded=False):
+                search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
+                selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
+                selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
         else:
             # PC 모드: 기존 레이아웃
             col_search, col_empty = st.columns([1, 1])
