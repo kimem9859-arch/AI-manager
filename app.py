@@ -156,47 +156,6 @@ def update_sheet_any(sheet_name, row_data):
         return True
     except: return False
 
-# [기능추가] 분류설정 시트에서 상위/하위 작업 목록 로드
-def load_category_settings():
-    """분류설정 시트에서 상위 작업과 하위 작업 매핑 로드"""
-    try:
-        sh = get_spreadsheet()
-        try:
-            ws = sh.worksheet("분류설정")
-        except:
-            # 분류설정 시트가 없으면 기본값 반환
-            return {}, [], []
-        
-        all_values = ws.get_all_values()
-        if len(all_values) < 2:
-            return {}, [], []
-        
-        # 헤더 제외하고 데이터만
-        data = all_values[1:]
-        
-        # 상위 작업 → 하위 작업 목록 매핑
-        category_map = {}
-        all_upper = []
-        all_lower = []
-        
-        for row in data:
-            if len(row) >= 2:
-                upper = row[0].strip()
-                lower = row[1].strip()
-                if upper and lower:
-                    if upper not in category_map:
-                        category_map[upper] = []
-                        all_upper.append(upper)
-                    if lower not in category_map[upper]:
-                        category_map[upper].append(lower)
-                    if lower not in all_lower:
-                        all_lower.append(lower)
-        
-        return category_map, all_upper, all_lower
-    except Exception as e:
-        st.error(f"분류설정 로드 실패: {e}")
-        return {}, [], []
-
 # [기능추가] 공지사항 읽어오기 함수
 def get_notice():
     try:
@@ -294,9 +253,6 @@ else:
 # 상태 옵션 정의 (전역)
 STATUS_OPTIONS = ["대기/보류", "진행", "수정/검토", "완료"]
 
-# 분류설정 로드
-category_map, all_upper_tasks, all_lower_tasks = load_category_settings()
-
 # 작업 데이터 로드
 df_task = load_data_safe("작업")
 if not df_task.empty and '상태' in df_task.columns:
@@ -392,13 +348,14 @@ if upper_task_progress:
         else:
             bar_color = "#4CAF50"
         
+        # 진행률이 낮을 때 텍스트가 바 바깥에 표시되도록 처리
+        bar_width = max(progress_int, 5)  # 최소 너비 5%
         progress_html += f'''
         <div style="flex:1; min-width:200px; max-width:300px;">
             <div style="font-size:0.9em; margin-bottom:5px;">📂 {upper_name}</div>
-            <div style="background-color:rgba(200,200,200,0.3); border-radius:10px; height:20px; overflow:hidden;">
-                <div style="background-color:{bar_color}; width:{progress_int}%; height:100%; border-radius:10px; display:flex; align-items:center; justify-content:center;">
-                    <span style="font-size:0.75em; color:white; font-weight:bold;">{progress_int}%</span>
-                </div>
+            <div style="background-color:rgba(200,200,200,0.3); border-radius:10px; height:20px; overflow:visible; position:relative;">
+                <div style="background-color:{bar_color}; width:{bar_width}%; height:100%; border-radius:10px;"></div>
+                <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:0.75em; color:{"white" if progress_int > 50 else "#666"}; font-weight:bold;">{progress_int}%</span>
             </div>
         </div>
         '''
@@ -443,8 +400,8 @@ with tab_sheet:
         with col_search:
             search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
         
-        # 상위 작업 / 하위 작업 / 상태 필터 (가로 배치)
-        col_upper, col_lower, col_status = st.columns([1, 1, 1])
+        # 상위 작업 / 상태 필터 (가로 배치)
+        col_upper, col_status = st.columns([1, 1])
         
         # 상위 작업 필터
         with col_upper:
@@ -453,19 +410,6 @@ with tab_sheet:
             else:
                 all_upper = []
             selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper")
-        
-        # 하위 작업 필터 (상위 작업 선택에 따라 종속)
-        with col_lower:
-            if '하위 작업' in df_task.columns:
-                # 선택된 상위 작업에 해당하는 하위 작업만 필터링
-                if selected_upper and '상위 작업' in df_task.columns:
-                    filtered_lower = df_task[df_task['상위 작업'].isin(selected_upper)]['하위 작업'].unique()
-                    all_lower = [s for s in filtered_lower if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
-                else:
-                    all_lower = [s for s in df_task['하위 작업'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
-            else:
-                all_lower = []
-            selected_lower = st.multiselect("📁 하위 작업", all_lower, default=list(all_lower), key="filter_lower")
         
         # 상태 필터
         with col_status:
@@ -482,15 +426,11 @@ with tab_sheet:
         if '상위 작업' in df_view.columns and selected_upper:
             df_view = df_view[df_view['상위 작업'].isin(selected_upper)]
         
-        # (2) 하위 작업 필터 적용
-        if '하위 작업' in df_view.columns and selected_lower:
-            df_view = df_view[df_view['하위 작업'].isin(selected_lower)]
-        
-        # (3) 상태 필터 적용
+        # (2) 상태 필터 적용
         if '상태' in df_view.columns and selected_status:
             df_view = df_view[df_view['상태'].isin(selected_status)]
             
-        # (4) 검색어 적용 (하위 작업명 기준)
+        # (3) 검색어 적용 (하위 작업명 기준)
         if search_query:
             # 상위 작업, 하위 작업, 비고 모두에서 검색
             mask = df_view['하위 작업'].astype(str).str.contains(search_query, case=False, na=False) if '하위 작업' in df_view.columns else pd.Series([False]*len(df_view))
@@ -706,13 +646,6 @@ if prompt := st.chat_input("💬 AI에게 명령하기 (예: '소프트웨어 �
         # 전체 물품 데이터 (요약용)
         items_full_data = df_items.to_string(index=False) if not df_items.empty else "물품 데이터 없음"
         
-        # 분류설정 정보 (상위/하위 작업 목록)
-        category_info = ""
-        if category_map:
-            category_info = "사용 가능한 상위 작업 및 하위 작업 목록:\n"
-            for upper, lowers in category_map.items():
-                category_info += f"- {upper}: {', '.join(lowers)}\n"
-        
         # 3. AI 시스템 프롬프트 (확장된 기능 - 계층 구조 지원)
         sys_msg = f"""
         당신은 구글 시트 데이터베이스 관리자입니다.
@@ -726,9 +659,6 @@ if prompt := st.chat_input("💬 AI에게 명령하기 (예: '소프트웨어 �
         {task_headers}
         - 순서: 상위 작업, 하위 작업, 상태, 비고, 진행률
         - 새 작업 추가 시: 상태 "대기/보류", 비고 "", 진행률 "0%" 로 채우세요.
-
-        [분류설정 - 상위/하위 작업 목록]
-        {category_info if category_info else "분류설정 없음 (자유롭게 입력 가능)"}
 
         [현재 작업 데이터 전체]
         {task_full_data}
