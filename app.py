@@ -133,8 +133,8 @@ def delete_row_by_target(sheet_name, target):
         client = get_spreadsheet()
         ws = client.worksheet(sheet_name)
         cell = ws.find(target)
-        # gspread 행 번호는 1부터 시작
-        ws.delete_row(cell.row)
+        # gspread v5: delete_rows(행번호) — end_index 없으면 해당 행 1줄만 삭제
+        ws.delete_rows(cell.row)
         return True, None
     except Exception as e:
         return False, str(e)
