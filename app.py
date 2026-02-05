@@ -737,12 +737,23 @@ if prompt := st.chat_input("명령을 입력하세요"):
                 except:
                     progress_num = 0
                 
+                # 현재 진행률 확인 (0%에서 최초 변경인지 체크)
+                current_progress = 0
+                if not df_task.empty and '진행률' in df_task.columns:
+                    task_row = df_task[df_task.iloc[:, 0] == target]
+                    if not task_row.empty:
+                        try:
+                            current_val = str(task_row['진행률'].values[0]).replace('%', '').strip()
+                            current_progress = float(current_val) if current_val else 0
+                        except:
+                            current_progress = 0
+                
                 ok, err = update_cell_by_target("작업", target, "진행", val)
                 if ok:
                     msg = f"📈 **'{target}'** 진행률을 **{val}**로 변경했습니다."
                     
-                    # 진행률이 0% 초과이면 상태를 자동으로 '진행'으로 변경
-                    if progress_num > 0:
+                    # 0%에서 최초 변경 시에만 상태를 자동으로 '진행'으로 변경
+                    if current_progress == 0 and progress_num > 0:
                         status_ok, _ = update_cell_by_target("작업", target, "상태", "진행")
                         if status_ok:
                             msg += f"\n▶️ 상태가 자동으로 **진행**으로 변경되었습니다."
