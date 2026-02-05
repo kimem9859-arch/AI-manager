@@ -44,6 +44,7 @@ def show_guide():
         
         st.markdown("#### 📢 공지 변경")
         st.code('"내일 회의로 공지 변경해줘"', language=None)
+        st.code('"공지사항 \'프로젝트 마감일 연장\'으로 변경해줘"', language=None)
     
     with tab2:
         st.markdown("### 📋 작업 현황 탭")
