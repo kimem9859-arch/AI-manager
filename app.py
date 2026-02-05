@@ -307,16 +307,15 @@ else:
 # --- [탭 1] 작업 리스트 (검색 & 필터 & 3색 신호등 & 상태 빠른 변경) ---
 with c_sheet:
     if not df_task.empty:
-        # 1. 필터 UI 구성 (검색창과 상태선택을 나란히 배치)
-        col_search, col_filter = st.columns([1, 1])
+        # 1. 필터 UI 구성 (검색창 위, 상태필터 아래)
+        search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...")
         
-        with col_search:
-            search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...")
-        
-        with col_filter:
-            # 상태 컬럼이 있으면 필터 생성, 없으면 빈 리스트
-            all_statuses = df_task['상태'].unique() if '상태' in df_task.columns else []
-            selected_status = st.multiselect("🏷️ 상태 필터", all_statuses, default=list(all_statuses))
+        # 상태 컬럼이 있으면 필터 생성 (None, 빈칸 제외)
+        if '상태' in df_task.columns:
+            all_statuses = [s for s in df_task['상태'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
+        else:
+            all_statuses = []
+        selected_status = st.multiselect("🏷️ 상태 필터", all_statuses, default=list(all_statuses))
 
         # 2. 데이터 필터링 로직
         df_view = df_task.copy()
