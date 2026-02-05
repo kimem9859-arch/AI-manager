@@ -221,6 +221,25 @@ def clear_cell_by_target(sheet_name, target, column_keyword):
     """특정 작업의 특정 열 내용을 빈칸으로 삭제"""
     return update_cell_by_target(sheet_name, target, column_keyword, "")
 
+# [기능] 마지막 수정 정보 가져오기
+def get_last_modified_info():
+    """스프레드시트의 마지막 수정 정보를 가져옴"""
+    try:
+        client = get_spreadsheet()
+        # 스프레드시트의 마지막 수정 시간 (gspread에서 직접 지원하지 않으므로 Drive API 사용)
+        from datetime import datetime
+        
+        # 작업 시트의 마지막 셀 변경 시간 대신, 현재 시간 기준으로 표시
+        # (실제 수정 시간을 가져오려면 Drive API 별도 설정 필요)
+        last_update = datetime.now().strftime("%Y-%m-%d %H:%M")
+        
+        return {
+            "시트명": client.title,
+            "확인시간": last_update
+        }
+    except Exception as e:
+        return {"오류": str(e)}
+
 # [기능] 상태 빠른 변경
 def update_status_quick(sheet_name, target, new_status):
     """상태를 빠르게 변경"""
@@ -298,6 +317,21 @@ with st.sidebar:
     if st.button("🔄 데이터 새로고침", use_container_width=True):
         st.rerun()
     if st.button("❓ 도움말"): show_guide()
+    
+    # 시트 정보 표시
+    st.divider()
+    st.markdown("### 📋 시트 정보")
+    sheet_info = get_last_modified_info()
+    if "오류" not in sheet_info:
+        st.markdown(f"""
+        <div style="background-color:rgba(100,100,100,0.1); padding:10px; border-radius:8px; font-size:0.85em;">
+            <p style="margin:5px 0;">📁 <b>시트:</b> {sheet_info.get('시트명', '-')}</p>
+            <p style="margin:5px 0;">🕐 <b>확인:</b> {sheet_info.get('확인시간', '-')}</p>
+            <p style="margin:5px 0;">📊 <b>작업:</b> {total}개 (완료: {done}개)</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.caption(f"시트 정보를 불러올 수 없습니다.")
 
 # 상단 통계 카드
 st.markdown(f"""
