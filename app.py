@@ -439,6 +439,32 @@ with c_sheet:
 # --- [탭 2] 물품 리스트 (검색 & 필터 & 링크 & 비용) ---
 with c_items:
     if not df_items.empty:
+        # 필터 UI 크기 축소 및 위치 조정 스타일
+        st.markdown("""
+        <style>
+        [data-testid="stTextInput"] {
+            margin-top: -20px;
+            margin-bottom: -10px;
+        }
+        [data-testid="stTextInput"] > div > div > input {
+            font-size: 0.9em;
+            padding: 0.35rem 0.5rem;
+        }
+        [data-testid="stTextInput"] > label {
+            font-size: 0.9em;
+        }
+        [data-testid="stMultiSelect"] > div {
+            font-size: 0.9em;
+        }
+        [data-testid="stMultiSelect"] > label {
+            font-size: 0.9em;
+        }
+        [data-testid="stMultiSelect"] span {
+            font-size: 0.9em;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
         # 1. 상단 UI 구성 (검색창 위, 상태필터 아래)
         search_item = st.text_input("📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...", key="item_search_input")
         
