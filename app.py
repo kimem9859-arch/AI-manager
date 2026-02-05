@@ -479,23 +479,22 @@ with tab_sheet:
         else:
             all_statuses = []
         
-        if is_mobile:
-            # 모바일 모드: 검색/필터를 접기/펼치기 가능하게
-            with st.expander("🔍 검색 및 필터", expanded=False):
+        # 검색/필터를 접기/펼치기 가능하게 (모바일/PC 공통)
+        with st.expander("🔍 검색 및 필터", expanded=not is_mobile):
+            if is_mobile:
+                # 모바일 모드: 세로 배치
                 search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
                 selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
                 selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
-        else:
-            # PC 모드: 기존 레이아웃
-            col_search, col_empty = st.columns([1, 1])
-            with col_search:
-                search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
-            
-            col_upper, col_status = st.columns([1, 1])
-            with col_upper:
-                selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
-            with col_status:
-                selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
+            else:
+                # PC 모드: 가로 3등분 배치
+                col_search, col_upper, col_status = st.columns([1, 1, 1])
+                with col_search:
+                    search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
+                with col_upper:
+                    selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
+                with col_status:
+                    selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
 
         # 2. 데이터 필터링 로직
         df_view = df_task.copy()
