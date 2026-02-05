@@ -440,13 +440,14 @@ with tab_sheet:
             }
             [data-testid="stTextInput"] > div > div > input {
                 font-size: 0.9em;
-                padding: 0.35rem 0.5rem;
+                height: 38px !important;
             }
             [data-testid="stTextInput"] > label {
                 font-size: 0.9em;
             }
-            [data-testid="stMultiSelect"] > div {
+            [data-testid="stMultiSelect"] > div > div {
                 font-size: 0.9em;
+                min-height: 38px !important;
             }
             [data-testid="stMultiSelect"] > label {
                 font-size: 0.9em;
