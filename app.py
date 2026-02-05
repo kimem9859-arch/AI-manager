@@ -301,9 +301,25 @@ if not df_items.empty:
 # ----------------------------------------------------------
 # 3. 화면 UI 구성
 # ----------------------------------------------------------
+# 상단 여백 줄이기 (위로 40% 이동)
+st.markdown("""
+<style>
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+    header[data-testid="stHeader"] {
+        height: 2rem !important;
+    }
+    .stApp > header {
+        background-color: transparent;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # 제목 (스타일 적용)
 st.markdown("""
-<h1 style="font-family: 'Segoe UI', 'Arial', sans-serif; font-weight: 700; letter-spacing: -1px;">
+<h1 style="font-family: 'Segoe UI', 'Arial', sans-serif; font-weight: 700; letter-spacing: -1px; margin-top: -20px; margin-bottom: 10px;">
     Project Manager
 </h1>
 """, unsafe_allow_html=True)
@@ -340,13 +356,38 @@ if upper_task_progress:
     progress_html = '<div style="display:flex; flex-wrap:wrap; gap:15px; background-color:rgba(100,100,100,0.05); padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);">'
     for upper_name, progress in upper_task_progress.items():
         progress_int = int(progress)
-        # 진행률에 따른 색상 (0-33: 주황, 34-66: 파랑, 67-100: 초록)
-        if progress_int < 34:
-            bar_color = "#FF9800"
-        elif progress_int < 67:
-            bar_color = "#2196F3"
+        
+        # 진행률에 따른 색상 (10% 단위: 빨강 → 주황 → 노랑 → 초록 → 파랑)
+        if progress_int <= 10:
+            bar_color = "#E53935"  # 빨강
+            text_color = "#FFFFFF"  # 흰색
+        elif progress_int <= 20:
+            bar_color = "#F4511E"  # 빨강-주황
+            text_color = "#FFFFFF"
+        elif progress_int <= 30:
+            bar_color = "#FF9800"  # 주황
+            text_color = "#000000"  # 검정
+        elif progress_int <= 40:
+            bar_color = "#FFB300"  # 주황-노랑
+            text_color = "#000000"
+        elif progress_int <= 50:
+            bar_color = "#FDD835"  # 노랑
+            text_color = "#000000"
+        elif progress_int <= 60:
+            bar_color = "#C0CA33"  # 노랑-초록
+            text_color = "#000000"
+        elif progress_int <= 70:
+            bar_color = "#7CB342"  # 연두
+            text_color = "#FFFFFF"
+        elif progress_int <= 80:
+            bar_color = "#43A047"  # 초록
+            text_color = "#FFFFFF"
+        elif progress_int <= 90:
+            bar_color = "#26A69A"  # 청록
+            text_color = "#FFFFFF"
         else:
-            bar_color = "#4CAF50"
+            bar_color = "#2196F3"  # 파랑 (100%)
+            text_color = "#FFFFFF"
         
         # 진행률이 낮을 때 텍스트가 바 바깥에 표시되도록 처리
         bar_width = max(progress_int, 5)  # 최소 너비 5%
@@ -355,7 +396,7 @@ if upper_task_progress:
             <div style="font-size:0.9em; margin-bottom:5px;">📂 {upper_name}</div>
             <div style="background-color:rgba(200,200,200,0.3); border-radius:10px; height:20px; overflow:visible; position:relative;">
                 <div style="background-color:{bar_color}; width:{bar_width}%; height:100%; border-radius:10px;"></div>
-                <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:0.75em; color:{"white" if progress_int > 50 else "#666"}; font-weight:bold;">{progress_int}%</span>
+                <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:0.75em; color:{text_color}; font-weight:bold; text-shadow: 0 0 3px rgba(0,0,0,0.3);">{progress_int}%</span>
             </div>
         </div>
         '''
