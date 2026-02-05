@@ -731,9 +731,22 @@ if prompt := st.chat_input("명령을 입력하세요"):
                 val = cmd.get("value", "0%")
                 if "%" not in str(val): val = str(val) + "%"
                 
+                # 진행률 숫자 추출
+                try:
+                    progress_num = float(str(val).replace('%', '').strip())
+                except:
+                    progress_num = 0
+                
                 ok, err = update_cell_by_target("작업", target, "진행", val)
                 if ok:
                     msg = f"📈 **'{target}'** 진행률을 **{val}**로 변경했습니다."
+                    
+                    # 진행률이 0% 초과이면 상태를 자동으로 '진행'으로 변경
+                    if progress_num > 0:
+                        status_ok, _ = update_cell_by_target("작업", target, "상태", "진행")
+                        if status_ok:
+                            msg += f"\n▶️ 상태가 자동으로 **진행**으로 변경되었습니다."
+                    
                     st.session_state.messages.append({"role": "assistant", "content": msg})
                     chat_box.chat_message("assistant").write(msg)
                     st.rerun()
