@@ -301,20 +301,12 @@ if not df_items.empty:
 # ----------------------------------------------------------
 # 3. 화면 UI 구성
 # ----------------------------------------------------------
-# 상단 여백 최소화
+# 상단 여백 적절히 조정
 st.markdown("""
 <style>
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 1rem !important;
-    }
-    header[data-testid="stHeader"] {
-        height: 0 !important;
-        min-height: 0 !important;
-        visibility: hidden;
-    }
-    #MainMenu {
-        visibility: hidden;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -379,33 +371,6 @@ if upper_task_progress:
                 st.caption(f"📂 {upper_name}")
                 st.progress(progress_int / 100, text=f"{progress_int}%")
 
-# 모바일 모드: 상단 카드 제외 모든 글자 크기 10% 축소
-if is_mobile:
-    st.markdown("""
-    <style>
-        /* 탭, 테이블, expander 등 글자 크기 축소 */
-        [data-testid="stTabs"] {
-            font-size: 0.9em !important;
-        }
-        [data-testid="stExpander"] {
-            font-size: 0.9em !important;
-        }
-        [data-testid="stDataFrame"] {
-            font-size: 0.9em !important;
-        }
-        [data-testid="stCaption"] {
-            font-size: 0.8em !important;
-        }
-        .stDataFrame td, .stDataFrame th {
-            font-size: 0.85em !important;
-        }
-        /* 버튼 글자 */
-        button {
-            font-size: 0.9em !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
 # 탭 구성 (채팅창 제거, 전체 너비 사용)
 tab_sheet, tab_items = st.tabs(["📊 작업 현황", "📦 물품 견적"])
 
@@ -440,22 +405,22 @@ with tab_sheet:
             </style>
             """, unsafe_allow_html=True)
         else:
-            # PC 모드: 수평 정렬 맞춤
+            # PC 모드: 기존 스타일
             st.markdown("""
             <style>
-            [data-testid="stHorizontalBlock"] {
-                align-items: flex-end !important;
+            [data-testid="stTextInput"] {
+                margin-top: -20px;
+                margin-bottom: -10px;
             }
             [data-testid="stTextInput"] > div > div > input {
                 font-size: 0.9em;
-                height: 38px !important;
+                padding: 0.35rem 0.5rem;
             }
             [data-testid="stTextInput"] > label {
                 font-size: 0.9em;
             }
-            [data-testid="stMultiSelect"] > div > div {
+            [data-testid="stMultiSelect"] > div {
                 font-size: 0.9em;
-                min-height: 38px !important;
             }
             [data-testid="stMultiSelect"] > label {
                 font-size: 0.9em;
@@ -479,22 +444,23 @@ with tab_sheet:
         else:
             all_statuses = []
         
-        # 검색/필터를 접기/펼치기 가능하게 (모바일/PC 공통)
-        with st.expander("🔍 검색 및 필터", expanded=not is_mobile):
-            if is_mobile:
-                # 모바일 모드: 세로 배치
+        if is_mobile:
+            # 모바일 모드: 검색/필터를 접기/펼치기 가능하게
+            with st.expander("🔍 검색 및 필터", expanded=False):
                 search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
                 selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
                 selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
-            else:
-                # PC 모드: 가로 3등분 배치
-                col_search, col_upper, col_status = st.columns([1, 1, 1])
-                with col_search:
-                    search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
-                with col_upper:
-                    selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
-                with col_status:
-                    selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
+        else:
+            # PC 모드: 기존 레이아웃
+            col_search, col_empty = st.columns([1, 1])
+            with col_search:
+                search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
+            
+            col_upper, col_status = st.columns([1, 1])
+            with col_upper:
+                selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택")
+            with col_status:
+                selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택")
 
         # 2. 데이터 필터링 로직
         df_view = df_task.copy()
