@@ -369,30 +369,58 @@ tab_sheet, tab_items = st.tabs(["📊 작업 현황", "📦 물품 견적"])
 with tab_sheet:
     if not df_task.empty:
         # 필터 UI 크기 축소 및 위치 조정 스타일
-        st.markdown("""
-        <style>
-        [data-testid="stTextInput"] {
-            margin-top: -20px;
-            margin-bottom: -10px;
-        }
-        [data-testid="stTextInput"] > div > div > input {
-            font-size: 0.9em;
-            padding: 0.35rem 0.5rem;
-        }
-        [data-testid="stTextInput"] > label {
-            font-size: 0.9em;
-        }
-        [data-testid="stMultiSelect"] > div {
-            font-size: 0.9em;
-        }
-        [data-testid="stMultiSelect"] > label {
-            font-size: 0.9em;
-        }
-        [data-testid="stMultiSelect"] span {
-            font-size: 0.9em;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        if is_mobile:
+            # 모바일 모드: expander 내부에서 마진 초기화
+            st.markdown("""
+            <style>
+            [data-testid="stExpander"] [data-testid="stTextInput"] {
+                margin-top: 0px;
+                margin-bottom: 10px;
+            }
+            [data-testid="stTextInput"] > div > div > input {
+                font-size: 0.9em;
+                padding: 0.35rem 0.5rem;
+            }
+            [data-testid="stTextInput"] > label {
+                font-size: 0.9em;
+            }
+            [data-testid="stMultiSelect"] > div {
+                font-size: 0.9em;
+            }
+            [data-testid="stMultiSelect"] > label {
+                font-size: 0.9em;
+            }
+            [data-testid="stMultiSelect"] span {
+                font-size: 0.9em;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+        else:
+            # PC 모드: 기존 스타일
+            st.markdown("""
+            <style>
+            [data-testid="stTextInput"] {
+                margin-top: -20px;
+                margin-bottom: -10px;
+            }
+            [data-testid="stTextInput"] > div > div > input {
+                font-size: 0.9em;
+                padding: 0.35rem 0.5rem;
+            }
+            [data-testid="stTextInput"] > label {
+                font-size: 0.9em;
+            }
+            [data-testid="stMultiSelect"] > div {
+                font-size: 0.9em;
+            }
+            [data-testid="stMultiSelect"] > label {
+                font-size: 0.9em;
+            }
+            [data-testid="stMultiSelect"] span {
+                font-size: 0.9em;
+            }
+            </style>
+            """, unsafe_allow_html=True)
         
         # 1. 필터 UI 구성
         # 상위 작업 옵션 미리 계산
