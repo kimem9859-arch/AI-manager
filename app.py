@@ -45,6 +45,12 @@ def show_guide():
         st.markdown("#### 📢 공지 변경")
         st.code('"내일 회의로 공지 변경해줘"', language=None)
         st.code('"공지사항 \'프로젝트 마감일 연장\'으로 변경해줘"', language=None)
+        
+        st.markdown("#### 📊 데이터 요약/조회")
+        st.code('"진행 중인 작업 알려줘"', language=None)
+        st.code('"우선순위가 높은 작업 요약해줘"', language=None)
+        st.code('"개발팀에서 맡은 업무 알려줘"', language=None)
+        st.code('"아직 배송되지 않은 물품 알려줘"', language=None)
     
     with tab2:
         st.markdown("### 📋 작업 현황 탭")
@@ -563,6 +569,12 @@ if prompt := st.chat_input("명령을 입력하세요"):
         # 2. 현재 데이터 요약 + 작업 시트 컬럼 순서 (추가 시 행 순서 맞추기용)
         task_summary = df_task.iloc[:, 0].tolist() if not df_task.empty else "없음"
         task_headers = df_task.columns.tolist() if not df_task.empty else ["작업명", "진행률", "세부내용", "상태", "비고"]
+        
+        # 전체 작업 데이터 (요약용)
+        task_full_data = df_task.to_string(index=False) if not df_task.empty else "작업 데이터 없음"
+        
+        # 전체 물품 데이터 (요약용)
+        items_full_data = df_items.to_string(index=False) if not df_items.empty else "물품 데이터 없음"
         # 새 작업 한 행 예시: 시트 컬럼 순서에 맞게 [작업명, 진행률, 세부내용, 상태, 비고] 등 배치
         def _example_row_for_new_task(headers):
             row = [""] * len(headers)
@@ -588,14 +600,17 @@ if prompt := st.chat_input("명령을 입력하세요"):
         [절대 규칙]
         1. 당신은 사용자의 말을 듣고 **JSON 데이터만** 출력해야 합니다.
         2. 절대로 대화하거나, 설명을 덧붙이거나, 문장을 교정하지 마십시오.
-        3. 명령어 종류: add(추가), delete(삭제), update_progress(진행률변경), update_status(상태변경), update_detail(세부내용변경), update_remark(비고변경), clear_cell(셀내용삭제), notice(공지변경), chat(대화)
+        3. 명령어 종류: add(추가), delete(삭제), update_progress(진행률변경), update_status(상태변경), update_detail(세부내용변경), update_remark(비고변경), clear_cell(셀내용삭제), notice(공지변경), summary(데이터요약), chat(대화)
 
         [작업 시트 컬럼 순서] (추가 시 row는 이 순서와 반드시 동일하게)
         {task_headers}
         - 새 작업 추가 시: 진행률 "0%", 세부내용 "", 상태 "대기/보류", 비고 "" 로 채우세요.
 
-        [현재 작업 목록]
-        {task_summary}
+        [현재 작업 데이터 전체]
+        {task_full_data}
+
+        [현재 물품 데이터 전체]
+        {items_full_data}
 
         [상태 옵션] (반드시 이 4가지만 사용!)
         대기/보류, 진행, 수정/검토, 완료
@@ -630,7 +645,13 @@ if prompt := st.chat_input("명령을 입력하세요"):
            {{"action": "notice", "content": "새로운 공지 내용"}}
            ("공지" 또는 "공지사항" 모두 같은 명령으로 인식)
            
-        10. 일반 대화:
+        10. 데이터 요약/조회 (~ 알려줘, ~ 요약해줘, ~ 있어?, ~ 뭐야?):
+            {{"action": "summary", "response": "요약 내용을 자연스러운 문장으로 작성"}}
+            - 작업 데이터나 물품 데이터를 분석하여 사용자 질문에 답변
+            - 상태별 작업, 팀별 업무, 마감일, 물품 배송상태 등을 요약
+            - 한국어로 친절하게 답변
+           
+        11. 일반 대화:
             {{"action": "chat", "response": "할말"}}
         
         [예시]
@@ -663,6 +684,18 @@ if prompt := st.chat_input("명령을 입력하세요"):
         
         Q: "공지사항 '프로젝트 마감일 연장'으로 변경해줘"
         A: {{"action": "notice", "content": "프로젝트 마감일 연장"}}
+        
+        Q: "진행 중인 작업 알려줘"
+        A: {{"action": "summary", "response": "현재 진행 중인 작업은 다음과 같습니다:\\n1. OOO (진행률: 50%)\\n2. XXX (진행률: 30%)"}}
+        
+        Q: "우선순위가 높은 작업 알려줘"
+        A: {{"action": "summary", "response": "우선순위가 높은 작업을 정리했습니다:\\n1. OOO - 마감임박\\n2. XXX - 긴급"}}
+        
+        Q: "아직 배송되지 않은 물품 알려줘"
+        A: {{"action": "summary", "response": "배송되지 않은 물품 목록입니다:\\n1. OOO - 주문완료\\n2. XXX - 배송대기"}}
+        
+        Q: "개발팀에서 맡은 업무 알려줘"
+        A: {{"action": "summary", "response": "개발팀 담당 업무:\\n1. OOO (진행률: 70%)\\n2. XXX (진행률: 40%)"}}
         """
 
         try:
@@ -799,7 +832,12 @@ if prompt := st.chat_input("명령을 입력하세요"):
                     else:
                         msg = f"😅 **'{target}'** 항목을 찾을 수 없거나 삭제에 실패했습니다. ({err})"
 
-            # [동작 9] 그 외 (대화 등)
+            # [동작 9] 데이터 요약 (Summary)
+            elif action == "summary":
+                msg = cmd.get("response", "요약 정보를 가져올 수 없습니다.")
+                msg = f"📊 **데이터 요약**\n\n{msg}"
+
+            # [동작 10] 그 외 (대화 등)
             else:
                 msg = cmd.get("response", "명령을 이해하지 못했습니다.")
 
