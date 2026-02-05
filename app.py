@@ -301,25 +301,19 @@ if not df_items.empty:
 # ----------------------------------------------------------
 # 3. 화면 UI 구성
 # ----------------------------------------------------------
-# 상단 여백 줄이기 (위로 40% 이동)
+# 상단 여백 적절히 조정
 st.markdown("""
 <style>
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 2rem !important;
         padding-bottom: 1rem !important;
-    }
-    header[data-testid="stHeader"] {
-        height: 2rem !important;
-    }
-    .stApp > header {
-        background-color: transparent;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # 제목 (스타일 적용)
 st.markdown("""
-<h1 style="font-family: 'Segoe UI', 'Arial', sans-serif; font-weight: 700; letter-spacing: -1px; margin-top: -20px; margin-bottom: 10px;">
+<h1 style="font-family: 'Segoe UI', 'Arial', sans-serif; font-weight: 700; letter-spacing: -1px; margin-top: 0px; margin-bottom: 10px;">
     Project Manager
 </h1>
 """, unsafe_allow_html=True)
