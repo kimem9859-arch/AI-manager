@@ -318,31 +318,40 @@ with c_sheet:
             except: 
                 return 0
 
-        # 4. 진행률 색상 이모지 결정 함수 (빨강→주황→노랑→초록→파랑)
-        def get_progress_emoji(percent):
-            """0~100% 값에 따른 색상 이모지 반환"""
+        # 4. 진행률 게이지 바 생성 함수 (색상별 가로 막대)
+        def create_gauge_bar(percent):
+            """0~100% 값에 따른 색상 게이지 바 반환"""
             percent = max(0, min(100, percent))
             
+            # 10칸 기준 게이지
+            filled = int(percent / 10)
+            empty = 10 - filled
+            
+            # 색상별 이모지 결정
             if percent >= 100:
-                return "🔵"  # 100%: 파랑
+                bar_char = "🟦"  # 파랑
             elif percent >= 70:
-                return "🟢"  # 70-99%: 초록
+                bar_char = "🟩"  # 초록
             elif percent >= 40:
-                return "🟡"  # 40-69%: 노랑
+                bar_char = "🟨"  # 노랑
             elif percent >= 20:
-                return "🟠"  # 20-39%: 주황
+                bar_char = "🟧"  # 주황
             else:
-                return "🔴"  # 0-19%: 빨강
+                bar_char = "🟥"  # 빨강
+            
+            # 게이지 바 생성
+            gauge = bar_char * filled + "⬜" * empty
+            return f"{gauge} {int(percent)}%"
 
-        # 5. 결과 출력 (상태 빠른 변경 기능 + 테이블 내 색상 진행률 표시)
+        # 5. 결과 출력 (상태 빠른 변경 기능 + 테이블 내 게이지 바 표시)
         if not df_view.empty:
             # 원본 인덱스 저장 (수정 추적용)
             df_view = df_view.reset_index(drop=True)
             
-            # 진행률에 색상 이모지 추가
+            # 진행률을 게이지 바로 변환
             if '진행률' in df_view.columns:
                 df_view['진행률'] = df_view['진행률'].apply(
-                    lambda x: f"{get_progress_emoji(get_progress_num(x))} {int(get_progress_num(x))}%" 
+                    lambda x: create_gauge_bar(get_progress_num(x))
                     if pd.notna(x) and str(x).strip() not in ["", "-"] else x
                 )
             
@@ -384,7 +393,7 @@ with c_sheet:
                             st.error(f"상태 변경 실패: {err}")
             
             # 색상 범례
-            st.caption("💡 진행률: 🔴 0-19% | 🟠 20-39% | 🟡 40-69% | 🟢 70-99% | 🔵 100%  /  상태를 클릭하면 드롭다운으로 빠르게 변경!")
+            st.caption("💡 진행률: 🟥 0-19% | 🟧 20-39% | 🟨 40-69% | 🟩 70-99% | 🟦 100%  /  상태를 클릭하면 드롭다운으로 빠르게 변경!")
         else:
             st.warning("검색 결과가 없습니다.")
             
