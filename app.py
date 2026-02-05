@@ -127,6 +127,18 @@ def update_notice(text):
         return True
     except: return False
 
+# [기능] 시트에서 target(작업명/품목명)이 있는 행 삭제
+def delete_row_by_target(sheet_name, target):
+    try:
+        client = get_spreadsheet()
+        ws = client.worksheet(sheet_name)
+        cell = ws.find(target)
+        # gspread 행 번호는 1부터 시작
+        ws.delete_row(cell.row)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
 # Gemini 모델 설정 (Secrets → 환경변수 fallback)
 _api_key = None
 if "GOOGLE_API_KEY" in st.secrets:
@@ -385,6 +397,7 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
         2. 절대로 대화하거나, 설명을 덧붙이거나, 문장을 교정하지 마십시오.
         3. 사용자가 숫자(%)와 함께 "변경", "수정" 등을 말하면 'update' 명령입니다.
         4. "공지", "공지사항"을 변경하라고 하면 'notice' 명령입니다.
+        5. "삭제", "삭제해줘", "지워줘" 등으로 작업/물품을 없애달라고 하면 'delete' 명령입니다. target에는 삭제할 작업명 또는 품목명(정확한 이름), sheet에는 "작업" 또는 "물품"을 넣습니다.
 
         [현재 작업 목록]
         {task_summary}
@@ -393,12 +406,14 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
         - 추가: {{"action": "add", "sheet": "작업/물품", "row": ["내용", "대기", "", "", "", "0%"]}}
         - 수정: {{"action": "update", "sheet": "작업", "target": "작업명", "value": "50%"}}
         - 공지: {{"action": "notice", "content": "새로운 공지 내용"}}
-        - 삭제: {{"action": "delete", "target": "..."}}
+        - 삭제: {{"action": "delete", "sheet": "작업 또는 물품", "target": "삭제할 항목 이름"}}
         - 대화: {{"action": "chat", "response": "할말"}}
         
         [예시]
         Q: "공지사항 '내일 3시 회의'로 바꿔줘"
         A: {{"action": "notice", "content": "내일 3시 회의"}}
+        Q: "프로젝트 기획 작업 삭제해줘"
+        A: {{"action": "delete", "sheet": "작업", "target": "프로젝트 기획"}}
         """
 
         try:
@@ -452,7 +467,23 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
                 else:
                     msg = "❌ 공지사항 업데이트에 실패했습니다."
 
-            # [동작 4] 그 외
+            # [동작 4] 삭제 (Delete)
+            elif action == "delete":
+                sheet_name = cmd.get("sheet", "작업")
+                target = cmd.get("target")
+                if not target:
+                    msg = "❌ 삭제할 항목 이름(target)이 없습니다."
+                else:
+                    ok, err = delete_row_by_target(sheet_name, target)
+                    if ok:
+                        msg = f"🗑️ **{sheet_name}** 시트에서 **'{target}'** 항목을 삭제했습니다."
+                        st.session_state.messages.append({"role": "assistant", "content": msg})
+                        chat_box.chat_message("assistant").write(msg)
+                        st.rerun()
+                    else:
+                        msg = f"😅 **'{target}'** 항목을 찾을 수 없거나 삭제에 실패했습니다. ({err})"
+
+            # [동작 5] 그 외 (대화 등)
             else:
                 msg = cmd.get("response", "명령을 이해하지 못했습니다.")
 
