@@ -315,7 +315,7 @@ st.markdown("""
 current_notice = get_notice()
 notice_html = ""
 if current_notice not in ["-", "공지없음", "공지 연결 실패", ""]:
-    notice_html = f'<div style="background-color:rgba(30,136,229,0.15); padding:8px 15px; border-radius:8px; border-left:4px solid #1E88E5; font-size:0.9em;">📢 {current_notice}</div>'
+    notice_html = f'<div style="background-color:rgba(30,136,229,0.15); padding:8px 15px; border-radius:8px; border-left:4px solid #1E88E5; font-size:0.9em;"><b>📢 공지:</b> {current_notice}</div>'
 
 st.markdown(f"""
 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0px; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
