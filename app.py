@@ -301,12 +301,20 @@ if not df_items.empty:
 # ----------------------------------------------------------
 # 3. 화면 UI 구성
 # ----------------------------------------------------------
-# 상단 여백 적절히 조정
+# 상단 여백 최소화
 st.markdown("""
 <style>
     .block-container {
-        padding-top: 2rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 1rem !important;
+    }
+    header[data-testid="stHeader"] {
+        height: 0 !important;
+        min-height: 0 !important;
+        visibility: hidden;
+    }
+    #MainMenu {
+        visibility: hidden;
     }
 </style>
 """, unsafe_allow_html=True)
