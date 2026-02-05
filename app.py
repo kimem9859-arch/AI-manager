@@ -417,17 +417,35 @@ with tab_sheet:
             all_statuses = []
         
         if is_mobile:
-            # 모바일 모드: 검색, 상위작업, 상태 필터를 한 줄에 강제 가로 배치
+            # 모바일 모드: 검색, 상위작업, 상태 필터를 한 줄에 강제 가로 배치 + 크기 축소
             st.markdown("""
             <style>
             [data-testid="stHorizontalBlock"] {
                 flex-wrap: nowrap !important;
-                gap: 0.5rem !important;
+                gap: 0.3rem !important;
             }
             [data-testid="stHorizontalBlock"] > div[data-testid="column"] {
                 min-width: 0 !important;
                 flex: 1 1 0 !important;
                 width: 33.33% !important;
+            }
+            /* 모바일 입력창 크기 축소 */
+            [data-testid="stTextInput"] input {
+                font-size: 0.7em !important;
+                padding: 0.3rem 0.4rem !important;
+                height: 2rem !important;
+            }
+            [data-testid="stMultiSelect"] {
+                font-size: 0.7em !important;
+            }
+            [data-testid="stMultiSelect"] > div {
+                min-height: 2rem !important;
+            }
+            [data-testid="stMultiSelect"] span {
+                font-size: 0.65em !important;
+            }
+            [data-testid="stMultiSelect"] input {
+                font-size: 0.7em !important;
             }
             </style>
             """, unsafe_allow_html=True)
@@ -435,7 +453,7 @@ with tab_sheet:
             with col_search:
                 search_query = st.text_input("🔍", placeholder="검색", key="task_search", label_visibility="collapsed")
             with col_upper:
-                selected_upper = st.multiselect("📂", all_upper, default=list(all_upper), key="filter_upper", placeholder="상위 작업", label_visibility="collapsed")
+                selected_upper = st.multiselect("📂", all_upper, default=list(all_upper), key="filter_upper", placeholder="상위", label_visibility="collapsed")
             with col_status:
                 selected_status = st.multiselect("🏷️", all_statuses, default=list(all_statuses), key="filter_status", placeholder="상태", label_visibility="collapsed")
         else:
