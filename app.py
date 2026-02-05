@@ -318,30 +318,30 @@ with c_sheet:
             except: 
                 return 0
 
-        # 4. 진행률 게이지 바 생성 함수 (색상별 가로 막대)
+        # 4. 진행률 게이지 바 생성 함수 (작은 블록 문자 사용)
         def create_gauge_bar(percent):
-            """0~100% 값에 따른 색상 게이지 바 반환"""
+            """0~100% 값에 따른 컴팩트 게이지 바 반환"""
             percent = max(0, min(100, percent))
             
-            # 10칸 기준 게이지
+            # 10칸 기준 게이지 (작은 블록 문자)
             filled = int(percent / 10)
             empty = 10 - filled
             
-            # 색상별 이모지 결정
+            # 색상 이모지 결정 (작은 원형)
             if percent >= 100:
-                bar_char = "🟦"  # 파랑
+                color = "🔵"  # 파랑
             elif percent >= 70:
-                bar_char = "🟩"  # 초록
+                color = "🟢"  # 초록
             elif percent >= 40:
-                bar_char = "🟨"  # 노랑
+                color = "🟡"  # 노랑
             elif percent >= 20:
-                bar_char = "🟧"  # 주황
+                color = "🟠"  # 주황
             else:
-                bar_char = "🟥"  # 빨강
+                color = "🔴"  # 빨강
             
-            # 게이지 바 생성
-            gauge = bar_char * filled + "⬜" * empty
-            return f"{gauge} {int(percent)}%"
+            # 작은 블록 문자로 게이지 바 생성
+            gauge = "█" * filled + "░" * empty
+            return f"{color} {gauge} {int(percent)}%"
 
         # 5. 결과 출력 (상태 빠른 변경 기능 + 테이블 내 게이지 바 표시)
         if not df_view.empty:
@@ -393,7 +393,7 @@ with c_sheet:
                             st.error(f"상태 변경 실패: {err}")
             
             # 색상 범례
-            st.caption("💡 진행률: 🟥 0-19% | 🟧 20-39% | 🟨 40-69% | 🟩 70-99% | 🟦 100%  /  상태를 클릭하면 드롭다운으로 빠르게 변경!")
+            st.caption("💡 진행률: 🔴 0-19% | 🟠 20-39% | 🟡 40-69% | 🟢 70-99% | 🔵 100%  /  상태 클릭 시 드롭다운으로 변경 가능")
         else:
             st.warning("검색 결과가 없습니다.")
             
