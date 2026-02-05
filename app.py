@@ -273,7 +273,7 @@ if not df_items.empty:
 # 제목 (스타일 적용)
 st.markdown("""
 <h1 style="font-family: 'Segoe UI', 'Arial', sans-serif; font-weight: 700; letter-spacing: -1px;">
-    🤖 Project Manager
+    Project Manager
 </h1>
 """, unsafe_allow_html=True)
 
@@ -318,6 +318,22 @@ else:
 # --- [탭 1] 작업 리스트 (검색 & 필터 & 3색 신호등 & 상태 빠른 변경) ---
 with c_sheet:
     if not df_task.empty:
+        # 필터 UI 크기 축소 스타일
+        st.markdown("""
+        <style>
+        [data-testid="stTextInput"] > div > div > input {
+            font-size: 0.9em;
+            padding: 0.4rem 0.6rem;
+        }
+        [data-testid="stMultiSelect"] > div {
+            font-size: 0.9em;
+        }
+        [data-testid="stMultiSelect"] span {
+            font-size: 0.9em;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
         # 1. 필터 UI 구성 (검색창 위, 상태필터 아래)
         search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...")
         
