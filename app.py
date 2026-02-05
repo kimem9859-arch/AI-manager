@@ -15,6 +15,8 @@ st.set_page_config(page_title="내 AI 프로젝트 매니저", page_icon="🤖",
 # 세션 상태 초기화
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "last_ai_response" not in st.session_state:
+    st.session_state.last_ai_response = None
 
 # [기능] 사용 설명서
 @st.dialog("📖 사용 설명서", width="large")
@@ -27,33 +29,39 @@ def show_guide():
     
     with tab1:
         st.markdown("### 🗣️ AI에게 명령하기")
-        st.info("채팅창에 아래 형식으로 입력하세요!")
+        st.info("하단 입력창에 명령을 입력하세요! 결과는 팝업으로 표시됩니다.")
         
-        st.markdown("#### ➕ 작업 추가/삭제")
-        st.code('"라즈베리파이 추가해줘"  →  진행률 0%, 상태 대기/보류로 추가', language=None)
-        st.code('"라즈베리파이 삭제해줘"  →  작업 전체 삭제', language=None)
+        st.markdown("#### ➕ 작업 추가/삭제 (상위/하위 작업 계층 지원)")
+        st.code('"프로젝트 개발에 UI 설계 추가해줘"  →  상위: 프로젝트 개발, 하위: UI 설계', language=None)
+        st.code('"인프라 구축에 DB 설정 추가해줘"', language=None)
+        st.code('"소프트웨어 개발 삭제해줘"  →  하위 작업 기준으로 삭제', language=None)
         
         st.markdown("#### 📈 진행률/상태 변경")
-        st.code('"라즈베리파이 진행률 50%로 변경해줘"', language=None)
-        st.code('"라즈베리파이 상태 진행으로 바꿔줘"', language=None)
+        st.code('"소프트웨어 개발 진행률 50%로 변경해줘"', language=None)
+        st.code('"하드웨어 개발 상태 진행으로 바꿔줘"', language=None)
         
-        st.markdown("#### 📝 세부내용/비고 변경")
-        st.code('"라즈베리파이 세부내용 \'설계 진행 중\'으로 변경해줘"', language=None)
-        st.code('"라즈베리파이 비고에 \'담당자: 홍길동\' 넣어줘"', language=None)
-        st.code('"라즈베리파이 세부내용 삭제해줘"', language=None)
+        st.markdown("#### 📝 비고 변경")
+        st.code('"서버 구축 비고에 \'담당자: 홍길동\' 넣어줘"', language=None)
+        st.code('"서버 구축 비고 삭제해줘"', language=None)
         
         st.markdown("#### 📢 공지 변경")
         st.code('"내일 회의로 공지 변경해줘"', language=None)
-        st.code('"공지사항 \'프로젝트 마감일 연장\'으로 변경해줘"', language=None)
         
-        st.markdown("#### 📊 데이터 요약/조회")
+        st.markdown("#### 📊 데이터 요약/조회 (상위 작업별 조회 지원)")
+        st.code('"프로젝트 개발 진행률 알려줘"  →  상위 작업의 평균 진행률', language=None)
+        st.code('"인프라 구축 작업들 알려줘"  →  해당 상위 작업의 하위 작업 목록', language=None)
         st.code('"진행 중인 작업 알려줘"', language=None)
-        st.code('"우선순위가 높은 작업 요약해줘"', language=None)
-        st.code('"개발팀에서 맡은 업무 알려줘"', language=None)
         st.code('"아직 배송되지 않은 물품 알려줘"', language=None)
     
     with tab2:
         st.markdown("### 📋 작업 현황 탭")
+        
+        st.markdown("#### 🔍 필터 기능")
+        st.markdown("""
+        - **상위 작업 필터**: 프로젝트 개발, 인프라 구축 등 대분류 선택
+        - **하위 작업 필터**: 선택된 상위 작업에 속한 하위 작업만 표시 (종속형)
+        - **상태 필터**: 대기/보류, 진행, 수정/검토, 완료
+        """)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -70,7 +78,7 @@ def show_guide():
         
         st.divider()
         st.markdown("#### 📈 진행률 게이지 바")
-        st.markdown("진행률이 시각적인 프로그레스 바로 표시됩니다.")
+        st.markdown("상단에 상위 작업별 평균 진행률이 표시됩니다.")
     
     with tab3:
         col1, col2 = st.columns(2)
@@ -86,6 +94,7 @@ def show_guide():
             st.markdown("### ⚡ 편의 기능")
             st.markdown("""
             - 🔄 **자동 새로고침**: 데이터 변경 시 즉시 반영
+            - 💬 **AI 응답**: 팝업(Toast)으로 빠르게 확인
             """)
 
 # [기능] 구글 시트 연결 (통합)
@@ -146,6 +155,47 @@ def update_sheet_any(sheet_name, row_data):
         ws.append_row(row_data)
         return True
     except: return False
+
+# [기능추가] 분류설정 시트에서 상위/하위 작업 목록 로드
+def load_category_settings():
+    """분류설정 시트에서 상위 작업과 하위 작업 매핑 로드"""
+    try:
+        sh = get_spreadsheet()
+        try:
+            ws = sh.worksheet("분류설정")
+        except:
+            # 분류설정 시트가 없으면 기본값 반환
+            return {}, [], []
+        
+        all_values = ws.get_all_values()
+        if len(all_values) < 2:
+            return {}, [], []
+        
+        # 헤더 제외하고 데이터만
+        data = all_values[1:]
+        
+        # 상위 작업 → 하위 작업 목록 매핑
+        category_map = {}
+        all_upper = []
+        all_lower = []
+        
+        for row in data:
+            if len(row) >= 2:
+                upper = row[0].strip()
+                lower = row[1].strip()
+                if upper and lower:
+                    if upper not in category_map:
+                        category_map[upper] = []
+                        all_upper.append(upper)
+                    if lower not in category_map[upper]:
+                        category_map[upper].append(lower)
+                    if lower not in all_lower:
+                        all_lower.append(lower)
+        
+        return category_map, all_upper, all_lower
+    except Exception as e:
+        st.error(f"분류설정 로드 실패: {e}")
+        return {}, [], []
 
 # [기능추가] 공지사항 읽어오기 함수
 def get_notice():
@@ -244,6 +294,9 @@ else:
 # 상태 옵션 정의 (전역)
 STATUS_OPTIONS = ["대기/보류", "진행", "수정/검토", "완료"]
 
+# 분류설정 로드
+category_map, all_upper_tasks, all_lower_tasks = load_category_settings()
+
 # 작업 데이터 로드
 df_task = load_data_safe("작업")
 if not df_task.empty and '상태' in df_task.columns:
@@ -254,6 +307,22 @@ if not df_task.empty and '상태' in df_task.columns:
     done = len(df_task[df_task['상태']=='완료'])
 else:
     total, pending, in_progress, reviewing, done = 0, 0, 0, 0, 0
+
+# 상위 작업별 진행률 계산
+upper_task_progress = {}
+if not df_task.empty and '상위 작업' in df_task.columns and '진행률' in df_task.columns:
+    for upper in df_task['상위 작업'].unique():
+        if upper and str(upper).strip():
+            subset = df_task[df_task['상위 작업'] == upper]
+            progress_values = []
+            for val in subset['진행률']:
+                try:
+                    num = float(str(val).replace('%', '').strip())
+                    progress_values.append(num)
+                except:
+                    progress_values.append(0)
+            if progress_values:
+                upper_task_progress[upper] = sum(progress_values) / len(progress_values)
 
 # 물품 데이터 로드
 df_items = load_data_safe("물품")
@@ -301,7 +370,7 @@ with st.sidebar:
 
 # 상단 통계 카드
 st.markdown(f"""
-    <div style="display:flex; justify-content:space-around; background-color:rgba(100,100,100,0.1); padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);">
+    <div style="display:flex; justify-content:space-around; background-color:rgba(100,100,100,0.1); padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid rgba(255,255,255,0.1);">
         <div style="text-align:center;">📌 전체 작업<br><b style="font-size:20px;">{total}</b></div>
         <div style="text-align:center;">⏳ 대기/보류<br><b style="font-size:20px; color:#FF9800;">{pending}</b></div>
         <div style="text-align:center;">▶️ 진행<br><b style="font-size:20px; color:#2196F3;">{in_progress}</b></div>
@@ -310,19 +379,37 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 탭 구성 (모바일/PC 분기)
-if is_mobile:
-    tab1, tab2, tab3 = st.tabs(["💬 채팅", "📊 작업", "📦 물품"])
-    c_chat, c_sheet, c_items = tab1, tab2, tab3
-else:
-    col1, col2 = st.columns([1, 1.3])
-    c_chat = col1
-    with col2:
-        sub1, sub2 = st.tabs(["📊 작업 현황", "📦 물품 견적"])
-        c_sheet, c_items = sub1, sub2
+# 상위 작업별 진행률 게이지 바
+if upper_task_progress:
+    progress_html = '<div style="display:flex; flex-wrap:wrap; gap:15px; background-color:rgba(100,100,100,0.05); padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);">'
+    for upper_name, progress in upper_task_progress.items():
+        progress_int = int(progress)
+        # 진행률에 따른 색상 (0-33: 주황, 34-66: 파랑, 67-100: 초록)
+        if progress_int < 34:
+            bar_color = "#FF9800"
+        elif progress_int < 67:
+            bar_color = "#2196F3"
+        else:
+            bar_color = "#4CAF50"
+        
+        progress_html += f'''
+        <div style="flex:1; min-width:200px; max-width:300px;">
+            <div style="font-size:0.9em; margin-bottom:5px;">📂 {upper_name}</div>
+            <div style="background-color:rgba(200,200,200,0.3); border-radius:10px; height:20px; overflow:hidden;">
+                <div style="background-color:{bar_color}; width:{progress_int}%; height:100%; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                    <span style="font-size:0.75em; color:white; font-weight:bold;">{progress_int}%</span>
+                </div>
+            </div>
+        </div>
+        '''
+    progress_html += '</div>'
+    st.markdown(progress_html, unsafe_allow_html=True)
+
+# 탭 구성 (채팅창 제거, 전체 너비 사용)
+tab_sheet, tab_items = st.tabs(["📊 작업 현황", "📦 물품 견적"])
 
 # --- [탭 1] 작업 리스트 (검색 & 필터 & 3색 신호등 & 상태 빠른 변경) ---
-with c_sheet:
+with tab_sheet:
     if not df_task.empty:
         # 필터 UI 크기 축소 및 위치 조정 스타일
         st.markdown("""
@@ -350,27 +437,68 @@ with c_sheet:
         </style>
         """, unsafe_allow_html=True)
         
-        # 1. 필터 UI 구성 (검색창 위, 상태필터 아래)
-        search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...")
+        # 1. 필터 UI 구성 (가로 배치)
+        # 검색창: 절반 너비
+        col_search, col_empty = st.columns([1, 1])
+        with col_search:
+            search_query = st.text_input("🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search")
         
-        # 상태 컬럼이 있으면 필터 생성 (None, 빈칸 제외)
-        if '상태' in df_task.columns:
-            all_statuses = [s for s in df_task['상태'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
-        else:
-            all_statuses = []
-        selected_status = st.multiselect("🏷️ 상태 필터", all_statuses, default=list(all_statuses))
+        # 상위 작업 / 하위 작업 / 상태 필터 (가로 배치)
+        col_upper, col_lower, col_status = st.columns([1, 1, 1])
+        
+        # 상위 작업 필터
+        with col_upper:
+            if '상위 작업' in df_task.columns:
+                all_upper = [s for s in df_task['상위 작업'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
+            else:
+                all_upper = []
+            selected_upper = st.multiselect("📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper")
+        
+        # 하위 작업 필터 (상위 작업 선택에 따라 종속)
+        with col_lower:
+            if '하위 작업' in df_task.columns:
+                # 선택된 상위 작업에 해당하는 하위 작업만 필터링
+                if selected_upper and '상위 작업' in df_task.columns:
+                    filtered_lower = df_task[df_task['상위 작업'].isin(selected_upper)]['하위 작업'].unique()
+                    all_lower = [s for s in filtered_lower if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
+                else:
+                    all_lower = [s for s in df_task['하위 작업'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
+            else:
+                all_lower = []
+            selected_lower = st.multiselect("📁 하위 작업", all_lower, default=list(all_lower), key="filter_lower")
+        
+        # 상태 필터
+        with col_status:
+            if '상태' in df_task.columns:
+                all_statuses = [s for s in df_task['상태'].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음']]
+            else:
+                all_statuses = []
+            selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status")
 
         # 2. 데이터 필터링 로직
         df_view = df_task.copy()
         
-        # (1) 상태 필터 적용
+        # (1) 상위 작업 필터 적용
+        if '상위 작업' in df_view.columns and selected_upper:
+            df_view = df_view[df_view['상위 작업'].isin(selected_upper)]
+        
+        # (2) 하위 작업 필터 적용
+        if '하위 작업' in df_view.columns and selected_lower:
+            df_view = df_view[df_view['하위 작업'].isin(selected_lower)]
+        
+        # (3) 상태 필터 적용
         if '상태' in df_view.columns and selected_status:
             df_view = df_view[df_view['상태'].isin(selected_status)]
             
-        # (2) 검색어 적용 (첫 번째 열: 작업명 기준)
+        # (4) 검색어 적용 (하위 작업명 기준)
         if search_query:
-            # 대소문자 구분 없이 검색
-            df_view = df_view[df_view.iloc[:, 0].astype(str).str.contains(search_query, case=False, na=False)]
+            # 상위 작업, 하위 작업, 비고 모두에서 검색
+            mask = df_view['하위 작업'].astype(str).str.contains(search_query, case=False, na=False) if '하위 작업' in df_view.columns else pd.Series([False]*len(df_view))
+            if '상위 작업' in df_view.columns:
+                mask = mask | df_view['상위 작업'].astype(str).str.contains(search_query, case=False, na=False)
+            if '비고' in df_view.columns:
+                mask = mask | df_view['비고'].astype(str).str.contains(search_query, case=False, na=False)
+            df_view = df_view[mask]
 
         # 3. 결과 출력 (상태 빠른 변경 기능 + ProgressColumn 게이지 바)
         if not df_view.empty:
@@ -411,7 +539,7 @@ with c_sheet:
             edited_df = st.data_editor(
                 df_view,
                 use_container_width=True,
-                height=500,
+                height=600,
                 column_config=col_config,
                 disabled=[col for col in df_view.columns if col != '상태'],  # 상태 열만 편집 가능
                 hide_index=True,
@@ -419,13 +547,13 @@ with c_sheet:
             )
             
             # 상태 변경 감지 및 적용
-            if '상태' in df_view.columns:
+            if '상태' in df_view.columns and '하위 작업' in df_view.columns:
                 for idx in range(len(df_view)):
                     old_status = df_view.at[idx, '상태']
                     new_status = edited_df.at[idx, '상태']
                     if old_status != new_status:
-                        # 작업명 가져오기 (첫 번째 열)
-                        task_name = df_view.iloc[idx, 0]
+                        # 하위 작업명 가져오기
+                        task_name = df_view.at[idx, '하위 작업']
                         ok, err = update_cell_by_target("작업", task_name, "상태", new_status)
                         if ok:
                             st.toast(f"✅ '{task_name}' 상태가 '{new_status}'로 변경되었습니다!", icon="🔄")
@@ -443,7 +571,7 @@ with c_sheet:
         st.info("작업 리스트가 비어있습니다.")
 
 # --- [탭 2] 물품 리스트 (검색 & 필터 & 링크 & 비용) ---
-with c_items:
+with tab_items:
     if not df_items.empty:
         # 필터 UI 크기 축소 및 위치 조정 스타일
         st.markdown("""
@@ -544,67 +672,63 @@ with c_items:
     else:
         st.info("물품 리스트가 비어있습니다.")
 
-# --- [탭 3] 채팅 및 AI 처리 (여기가 핵심!) ---
-with c_chat:
-    # 채팅방 헤더
-    st.subheader("💬 AI 매니저")
+# --- AI 채팅 입력 (하단 고정, Toast 팝업 형식) ---
+# AI 긴 응답(요약 등)이 있으면 Dialog로 표시
+@st.dialog("📊 AI 응답", width="large")
+def show_ai_response(response_text):
+    st.markdown(response_text)
+    if st.button("닫기", use_container_width=True):
+        st.session_state.last_ai_response = None
+        st.rerun()
 
-    # 대화 기록 표시
-    chat_box = st.container(height=500, border=True)
-    with chat_box:
-        for m in st.session_state.messages:
-            st.chat_message(m["role"]).write(m["content"])
+if st.session_state.last_ai_response:
+    show_ai_response(st.session_state.last_ai_response)
+    st.session_state.last_ai_response = None
 
-# 4. 사용자 입력 처리 (공지 수정 기능 추가됨)   
-if prompt := st.chat_input("명령을 입력하세요"):
+# 4. 사용자 입력 처리 (Toast 팝업 형식)   
+if prompt := st.chat_input("💬 AI에게 명령하기 (예: '소프트웨어 개발 진행률 50%로 변경해줘')"):
     # 1. 사용자 메시지 기록
     st.session_state.messages.append({"role": "user", "content": prompt})
-    chat_box.chat_message("user").write(prompt)
+    st.toast(f"📝 {prompt}", icon="👤")
 
     if model is None:
-        msg = "⚠️ API 키가 설정되지 않아 AI 명령을 처리할 수 없습니다. 사이드바 안내를 확인해주세요."
+        msg = "⚠️ API 키가 설정되지 않아 AI 명령을 처리할 수 없습니다."
         st.session_state.messages.append({"role": "assistant", "content": msg})
-        chat_box.chat_message("assistant").write(msg)
+        st.toast(msg, icon="⚠️")
     else:
         # 2. 현재 데이터 요약 + 작업 시트 컬럼 순서 (추가 시 행 순서 맞추기용)
-        task_summary = df_task.iloc[:, 0].tolist() if not df_task.empty else "없음"
-        task_headers = df_task.columns.tolist() if not df_task.empty else ["작업명", "진행률", "세부내용", "상태", "비고"]
+        # 새 컬럼 순서: 상위 작업, 하위 작업, 상태, 비고, 진행률
+        task_headers = df_task.columns.tolist() if not df_task.empty else ["상위 작업", "하위 작업", "상태", "비고", "진행률"]
         
         # 전체 작업 데이터 (요약용)
         task_full_data = df_task.to_string(index=False) if not df_task.empty else "작업 데이터 없음"
         
         # 전체 물품 데이터 (요약용)
         items_full_data = df_items.to_string(index=False) if not df_items.empty else "물품 데이터 없음"
-        # 새 작업 한 행 예시: 시트 컬럼 순서에 맞게 [작업명, 진행률, 세부내용, 상태, 비고] 등 배치
-        def _example_row_for_new_task(headers):
-            row = [""] * len(headers)
-            for i, h in enumerate(headers):
-                if "작업" in h or "명" in h or h == "제목":
-                    row[i] = "프로젝트 기획"
-                    break
-            for i, h in enumerate(headers):
-                if "진행" in h:
-                    row[i] = "0%"
-                    break
-            for i, h in enumerate(headers):
-                if "상태" in h:
-                    row[i] = "대기"
-                    break
-            return row
-        example_add_row = _example_row_for_new_task(task_headers)
         
-        # 3. AI 시스템 프롬프트 (확장된 기능)
+        # 분류설정 정보 (상위/하위 작업 목록)
+        category_info = ""
+        if category_map:
+            category_info = "사용 가능한 상위 작업 및 하위 작업 목록:\n"
+            for upper, lowers in category_map.items():
+                category_info += f"- {upper}: {', '.join(lowers)}\n"
+        
+        # 3. AI 시스템 프롬프트 (확장된 기능 - 계층 구조 지원)
         sys_msg = f"""
         당신은 구글 시트 데이터베이스 관리자입니다.
         
         [절대 규칙]
         1. 당신은 사용자의 말을 듣고 **JSON 데이터만** 출력해야 합니다.
         2. 절대로 대화하거나, 설명을 덧붙이거나, 문장을 교정하지 마십시오.
-        3. 명령어 종류: add(추가), delete(삭제), update_progress(진행률변경), update_status(상태변경), update_detail(세부내용변경), update_remark(비고변경), clear_cell(셀내용삭제), notice(공지변경), summary(데이터요약), chat(대화)
+        3. 명령어 종류: add(추가), delete(삭제), update_progress(진행률변경), update_status(상태변경), update_remark(비고변경), clear_cell(셀내용삭제), notice(공지변경), summary(데이터요약), chat(대화)
 
-        [작업 시트 컬럼 순서] (추가 시 row는 이 순서와 반드시 동일하게)
+        [작업 시트 컬럼 순서] (추가 시 row는 이 순서와 반드시 동일하게!)
         {task_headers}
-        - 새 작업 추가 시: 진행률 "0%", 세부내용 "", 상태 "대기/보류", 비고 "" 로 채우세요.
+        - 순서: 상위 작업, 하위 작업, 상태, 비고, 진행률
+        - 새 작업 추가 시: 상태 "대기/보류", 비고 "", 진행률 "0%" 로 채우세요.
+
+        [분류설정 - 상위/하위 작업 목록]
+        {category_info if category_info else "분류설정 없음 (자유롭게 입력 가능)"}
 
         [현재 작업 데이터 전체]
         {task_full_data}
@@ -616,86 +740,74 @@ if prompt := st.chat_input("명령을 입력하세요"):
         대기/보류, 진행, 수정/검토, 완료
 
         [출력 가능한 JSON 포맷]
-        1. 작업 추가 (~ 추가해줘):
-           {{"action": "add", "sheet": "작업", "row": ["작업명", "0%", "", "대기/보류", ""]}}
+        1. 작업 추가 (~ 추가해줘, ~에 ~ 추가해줘):
+           - "프로젝트 개발에 UI 설계 추가해줘" → 상위: 프로젝트 개발, 하위: UI 설계
+           - "소프트웨어 개발 추가해줘" → 문맥상 적절한 상위 작업 선택 또는 사용자에게 질문
+           {{"action": "add", "sheet": "작업", "row": ["상위 작업명", "하위 작업명", "대기/보류", "", "0%"]}}
            
         2. 작업 삭제 - 행 전체 삭제 (~ 삭제해줘, ~ 작업 삭제):
-           {{"action": "delete", "sheet": "작업", "target": "작업명"}}
+           - target은 "하위 작업명"으로 지정
+           {{"action": "delete", "sheet": "작업", "target": "하위 작업명"}}
            
         3. 진행률 변경 (~ 진행률 50%로 변경, ~ 50%로 바꿔줘):
-           {{"action": "update_progress", "target": "작업명", "value": "50%"}}
+           - target은 "하위 작업명"으로 지정
+           {{"action": "update_progress", "target": "하위 작업명", "value": "50%"}}
            
         4. 상태 변경 (~ 상태 진행으로 변경, ~ 완료로 바꿔줘):
-           {{"action": "update_status", "target": "작업명", "value": "진행"}}
+           - target은 "하위 작업명"으로 지정
+           {{"action": "update_status", "target": "하위 작업명", "value": "진행"}}
            (상태는 반드시 대기/보류, 진행, 수정/검토, 완료 중 하나)
            
-        5. 세부내용 변경 (~ 세부내용 "내용"으로 변경):
-           {{"action": "update_detail", "target": "작업명", "value": "새로운 세부내용"}}
+        5. 비고 변경 (~ 비고 "내용"으로 변경):
+           {{"action": "update_remark", "target": "하위 작업명", "value": "새로운 비고"}}
            
-        6. 세부내용 삭제 (~ 세부내용 삭제해줘):
-           {{"action": "clear_cell", "target": "작업명", "column": "세부"}}
+        6. 비고 삭제 (~ 비고 삭제해줘):
+           {{"action": "clear_cell", "target": "하위 작업명", "column": "비고"}}
            
-        7. 비고 변경 (~ 비고 "내용"으로 변경):
-           {{"action": "update_remark", "target": "작업명", "value": "새로운 비고"}}
-           
-        8. 비고 삭제 (~ 비고 삭제해줘):
-           {{"action": "clear_cell", "target": "작업명", "column": "비고"}}
-           
-        9. 공지 변경 (~로 공지 변경, 공지사항 ~로 변경):
+        7. 공지 변경 (~로 공지 변경, 공지사항 ~로 변경):
            {{"action": "notice", "content": "새로운 공지 내용"}}
-           ("공지" 또는 "공지사항" 모두 같은 명령으로 인식)
            
-        10. 데이터 요약/조회 (~ 알려줘, ~ 요약해줘, ~ 있어?, ~ 뭐야?):
+        8. 데이터 요약/조회 (~ 알려줘, ~ 요약해줘, ~ 있어?, ~ 뭐야?):
             {{"action": "summary", "response": "요약 내용을 자연스러운 문장으로 작성"}}
             - 작업 데이터나 물품 데이터를 분석하여 사용자 질문에 답변
-            - 상태별 작업, 팀별 업무, 마감일, 물품 배송상태 등을 요약
+            - 상위 작업별 진행률, 상태별 작업, 물품 배송상태 등을 요약
+            - "프로젝트 개발 진행률 알려줘" → 해당 상위 작업의 평균 진행률 계산
+            - "인프라 구축 작업들 알려줘" → 해당 상위 작업에 속한 하위 작업 목록
             - 한국어로 친절하게 답변
            
-        11. 일반 대화:
+        9. 일반 대화:
             {{"action": "chat", "response": "할말"}}
         
         [예시]
-        Q: "프로젝트 기획 추가해줘"
-        A: {{"action": "add", "sheet": "작업", "row": ["프로젝트 기획", "0%", "", "대기/보류", ""]}}
+        Q: "프로젝트 개발에 UI 설계 추가해줘"
+        A: {{"action": "add", "sheet": "작업", "row": ["프로젝트 개발", "UI 설계", "대기/보류", "", "0%"]}}
         
-        Q: "프로젝트 기획 삭제해줘"
-        A: {{"action": "delete", "sheet": "작업", "target": "프로젝트 기획"}}
+        Q: "인프라 구축에 DB 설정 추가해줘"
+        A: {{"action": "add", "sheet": "작업", "row": ["인프라 구축", "DB 설정", "대기/보류", "", "0%"]}}
         
-        Q: "프로젝트 기획 진행률 50%로 변경해줘"
-        A: {{"action": "update_progress", "target": "프로젝트 기획", "value": "50%"}}
+        Q: "소프트웨어 개발 삭제해줘"
+        A: {{"action": "delete", "sheet": "작업", "target": "소프트웨어 개발"}}
         
-        Q: "프로젝트 기획 상태를 진행으로 바꿔줘"
-        A: {{"action": "update_status", "target": "프로젝트 기획", "value": "진행"}}
+        Q: "소프트웨어 개발 진행률 50%로 변경해줘"
+        A: {{"action": "update_progress", "target": "소프트웨어 개발", "value": "50%"}}
         
-        Q: "프로젝트 기획 세부내용을 '기초 설계 진행 중'으로 변경해줘"
-        A: {{"action": "update_detail", "target": "프로젝트 기획", "value": "기초 설계 진행 중"}}
+        Q: "하드웨어 개발 상태를 진행으로 바꿔줘"
+        A: {{"action": "update_status", "target": "하드웨어 개발", "value": "진행"}}
         
-        Q: "프로젝트 기획 세부내용 삭제해줘"
-        A: {{"action": "clear_cell", "target": "프로젝트 기획", "column": "세부"}}
-        
-        Q: "프로젝트 기획 비고에 '담당자: 홍길동' 넣어줘"
-        A: {{"action": "update_remark", "target": "프로젝트 기획", "value": "담당자: 홍길동"}}
-        
-        Q: "프로젝트 기획 비고 삭제해줘"
-        A: {{"action": "clear_cell", "target": "프로젝트 기획", "column": "비고"}}
+        Q: "서버 구축 비고에 '담당자: 홍길동' 넣어줘"
+        A: {{"action": "update_remark", "target": "서버 구축", "value": "담당자: 홍길동"}}
         
         Q: "내일 회의로 공지 변경해줘"
         A: {{"action": "notice", "content": "내일 회의"}}
         
-        Q: "공지사항 '프로젝트 마감일 연장'으로 변경해줘"
-        A: {{"action": "notice", "content": "프로젝트 마감일 연장"}}
+        Q: "프로젝트 개발 진행률 알려줘"
+        A: {{"action": "summary", "response": "프로젝트 개발의 평균 진행률은 45%입니다.\\n- 소프트웨어 개발: 50%\\n- 하드웨어 개발: 40%"}}
+        
+        Q: "인프라 구축 작업들 알려줘"
+        A: {{"action": "summary", "response": "인프라 구축에 속한 작업 목록입니다:\\n1. 서버 구축 (진행률: 70%, 상태: 진행)\\n2. 네트워크 설정 (진행률: 100%, 상태: 완료)"}}
         
         Q: "진행 중인 작업 알려줘"
-        A: {{"action": "summary", "response": "현재 진행 중인 작업은 다음과 같습니다:\\n1. OOO (진행률: 50%)\\n2. XXX (진행률: 30%)"}}
-        
-        Q: "우선순위가 높은 작업 알려줘"
-        A: {{"action": "summary", "response": "우선순위가 높은 작업을 정리했습니다:\\n1. OOO - 마감임박\\n2. XXX - 긴급"}}
-        
-        Q: "아직 배송되지 않은 물품 알려줘"
-        A: {{"action": "summary", "response": "배송되지 않은 물품 목록입니다:\\n1. OOO - 주문완료\\n2. XXX - 배송대기"}}
-        
-        Q: "개발팀에서 맡은 업무 알려줘"
-        A: {{"action": "summary", "response": "개발팀 담당 업무:\\n1. OOO (진행률: 70%)\\n2. XXX (진행률: 40%)"}}
+        A: {{"action": "summary", "response": "현재 진행 중인 작업은 다음과 같습니다:\\n1. 소프트웨어 개발 (프로젝트 개발) - 50%\\n2. 서버 구축 (인프라 구축) - 70%"}}
         """
 
         try:
@@ -719,10 +831,13 @@ if prompt := st.chat_input("명령을 입력하세요"):
                     row_vals = [str(v) if v is not None else "" for v in row_vals[:n_cols]]
                     row_vals += [""] * (n_cols - len(row_vals))
                 update_sheet_any(sheet_name, row_vals)
-                task_name = row_vals[0] if row_vals else "새 작업"
-                msg = f"✅ **'{task_name}'** 작업이 추가되었습니다. (진행률: 0%, 상태: 대기/보류)"
+                # 상위 작업, 하위 작업 표시
+                upper_name = row_vals[0] if len(row_vals) > 0 else ""
+                lower_name = row_vals[1] if len(row_vals) > 1 else ""
+                msg = f"✅ '{upper_name} > {lower_name}' 작업이 추가되었습니다."
                 st.session_state.messages.append({"role": "assistant", "content": msg})
-                chat_box.chat_message("assistant").write(msg)
+                st.toast(msg, icon="✅")
+                time.sleep(1)
                 st.rerun()
 
             # [동작 2] 진행률 변경 (Update Progress)
@@ -739,8 +854,8 @@ if prompt := st.chat_input("명령을 입력하세요"):
                 
                 # 현재 진행률 확인 (0%에서 최초 변경인지 체크)
                 current_progress = 0
-                if not df_task.empty and '진행률' in df_task.columns:
-                    task_row = df_task[df_task.iloc[:, 0] == target]
+                if not df_task.empty and '진행률' in df_task.columns and '하위 작업' in df_task.columns:
+                    task_row = df_task[df_task['하위 작업'] == target]
                     if not task_row.empty:
                         try:
                             current_val = str(task_row['진행률'].values[0]).replace('%', '').strip()
@@ -750,19 +865,21 @@ if prompt := st.chat_input("명령을 입력하세요"):
                 
                 ok, err = update_cell_by_target("작업", target, "진행", val)
                 if ok:
-                    msg = f"📈 **'{target}'** 진행률을 **{val}**로 변경했습니다."
+                    msg = f"📈 '{target}' 진행률을 {val}로 변경했습니다."
                     
                     # 0%에서 최초 변경 시에만 상태를 자동으로 '진행'으로 변경
                     if current_progress == 0 and progress_num > 0:
                         status_ok, _ = update_cell_by_target("작업", target, "상태", "진행")
                         if status_ok:
-                            msg += f"\n▶️ 상태가 자동으로 **진행**으로 변경되었습니다."
+                            msg += " (상태: 진행으로 자동 변경)"
                     
                     st.session_state.messages.append({"role": "assistant", "content": msg})
-                    chat_box.chat_message("assistant").write(msg)
+                    st.toast(msg, icon="📈")
+                    time.sleep(1)
                     st.rerun()
                 else:
-                    msg = f"😅 **'{target}'** 작업을 찾을 수 없습니다. ({err})"
+                    msg = f"😅 '{target}' 작업을 찾을 수 없습니다."
+                    st.toast(msg, icon="😅")
 
             # [동작 3] 상태 변경 (Update Status)
             elif action == "update_status":
@@ -780,94 +897,94 @@ if prompt := st.chat_input("명령을 입력하세요"):
                 
                 ok, err = update_cell_by_target("작업", target, "상태", val)
                 if ok:
-                    msg = f"🔄 **'{target}'** 상태를 **{val}**(으)로 변경했습니다."
+                    msg = f"🔄 '{target}' 상태를 {val}(으)로 변경했습니다."
                     st.session_state.messages.append({"role": "assistant", "content": msg})
-                    chat_box.chat_message("assistant").write(msg)
+                    st.toast(msg, icon="🔄")
+                    time.sleep(1)
                     st.rerun()
                 else:
-                    msg = f"😅 **'{target}'** 작업을 찾을 수 없습니다. ({err})"
+                    msg = f"😅 '{target}' 작업을 찾을 수 없습니다."
+                    st.toast(msg, icon="😅")
 
-            # [동작 4] 세부내용 변경 (Update Detail)
-            elif action == "update_detail":
-                target = cmd.get("target")
-                val = cmd.get("value", "")
-                
-                ok, err = update_cell_by_target("작업", target, "세부", val)
-                if ok:
-                    msg = f"📝 **'{target}'** 세부내용을 변경했습니다: **{val}**"
-                    st.session_state.messages.append({"role": "assistant", "content": msg})
-                    chat_box.chat_message("assistant").write(msg)
-                    st.rerun()
-                else:
-                    msg = f"😅 **'{target}'** 작업을 찾을 수 없습니다. ({err})"
-
-            # [동작 5] 비고 변경 (Update Remark)
+            # [동작 4] 비고 변경 (Update Remark)
             elif action == "update_remark":
                 target = cmd.get("target")
                 val = cmd.get("value", "")
                 
                 ok, err = update_cell_by_target("작업", target, "비고", val)
                 if ok:
-                    msg = f"📋 **'{target}'** 비고를 변경했습니다: **{val}**"
+                    msg = f"📋 '{target}' 비고를 변경했습니다: {val}"
                     st.session_state.messages.append({"role": "assistant", "content": msg})
-                    chat_box.chat_message("assistant").write(msg)
+                    st.toast(msg, icon="📋")
+                    time.sleep(1)
                     st.rerun()
                 else:
-                    msg = f"😅 **'{target}'** 작업을 찾을 수 없습니다. ({err})"
+                    msg = f"😅 '{target}' 작업을 찾을 수 없습니다."
+                    st.toast(msg, icon="😅")
 
-            # [동작 6] 셀 내용 삭제 (Clear Cell) - 세부내용/비고 삭제
+            # [동작 5] 셀 내용 삭제 (Clear Cell) - 비고 삭제
             elif action == "clear_cell":
                 target = cmd.get("target")
                 column = cmd.get("column", "")
                 
                 ok, err = clear_cell_by_target("작업", target, column)
                 if ok:
-                    msg = f"🗑️ **'{target}'** 의 **{column}** 내용을 삭제했습니다."
+                    msg = f"🗑️ '{target}'의 {column} 내용을 삭제했습니다."
                     st.session_state.messages.append({"role": "assistant", "content": msg})
-                    chat_box.chat_message("assistant").write(msg)
+                    st.toast(msg, icon="🗑️")
+                    time.sleep(1)
                     st.rerun()
                 else:
-                    msg = f"😅 **'{target}'** 작업 또는 '{column}' 열을 찾을 수 없습니다. ({err})"
+                    msg = f"😅 '{target}' 작업 또는 '{column}' 열을 찾을 수 없습니다."
+                    st.toast(msg, icon="😅")
 
-            # [동작 7] ★ 공지 수정
+            # [동작 6] ★ 공지 수정
             elif action == "notice":
                 content = cmd.get("content")
                 if update_notice(content):
-                    msg = f"📢 공지사항이 업데이트 되었습니다: **{content}**"
+                    msg = f"📢 공지사항이 업데이트 되었습니다: {content}"
                     st.session_state.messages.append({"role": "assistant", "content": msg})
-                    chat_box.chat_message("assistant").write(msg)
+                    st.toast(msg, icon="📢")
+                    time.sleep(1)
                     st.rerun()
                 else:
                     msg = "❌ 공지사항 업데이트에 실패했습니다."
+                    st.toast(msg, icon="❌")
 
-            # [동작 8] 삭제 (Delete) - 행 전체 삭제
+            # [동작 7] 삭제 (Delete) - 행 전체 삭제
             elif action == "delete":
                 sheet_name = cmd.get("sheet", "작업")
                 target = cmd.get("target")
                 if not target:
-                    msg = "❌ 삭제할 항목 이름(target)이 없습니다."
+                    msg = "❌ 삭제할 항목 이름이 없습니다."
+                    st.toast(msg, icon="❌")
                 else:
                     ok, err = delete_row_by_target(sheet_name, target)
                     if ok:
-                        msg = f"🗑️ **{sheet_name}** 시트에서 **'{target}'** 항목을 삭제했습니다."
+                        msg = f"🗑️ '{target}' 항목을 삭제했습니다."
                         st.session_state.messages.append({"role": "assistant", "content": msg})
-                        chat_box.chat_message("assistant").write(msg)
+                        st.toast(msg, icon="🗑️")
+                        time.sleep(1)
                         st.rerun()
                     else:
-                        msg = f"😅 **'{target}'** 항목을 찾을 수 없거나 삭제에 실패했습니다. ({err})"
+                        msg = f"😅 '{target}' 항목을 찾을 수 없거나 삭제에 실패했습니다."
+                        st.toast(msg, icon="😅")
 
-            # [동작 9] 데이터 요약 (Summary)
+            # [동작 8] 데이터 요약 (Summary)
             elif action == "summary":
                 msg = cmd.get("response", "요약 정보를 가져올 수 없습니다.")
-                msg = f"📊 **데이터 요약**\n\n{msg}"
+                st.session_state.messages.append({"role": "assistant", "content": msg})
+                # 요약은 길 수 있으므로 dialog로 표시
+                st.session_state.last_ai_response = f"📊 {msg}"
+                st.rerun()
 
-            # [동작 10] 그 외 (대화 등)
+            # [동작 9] 그 외 (대화 등)
             else:
                 msg = cmd.get("response", "명령을 이해하지 못했습니다.")
+                st.session_state.messages.append({"role": "assistant", "content": msg})
+                st.toast(f"🤖 {msg}", icon="💬")
 
         except Exception as e:
             msg = f"오류가 발생했습니다: {e}"
-
-        # 4. 결과 출력 및 저장 (update/notice 성공 시에는 위에서 이미 append 후 rerun)
-        st.session_state.messages.append({"role": "assistant", "content": msg})
-        chat_box.chat_message("assistant").write(msg)
+            st.session_state.messages.append({"role": "assistant", "content": msg})
+            st.toast(msg, icon="❌")
