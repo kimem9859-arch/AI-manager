@@ -417,14 +417,22 @@ with tab_sheet:
             all_statuses = []
         
         if is_mobile:
-            # 모바일 모드: 검색, 상위작업, 상태 필터를 한 줄에 배치
-            col_search, col_upper, col_status = st.columns([1, 1, 1])
+            # 모바일 모드: 검색, 상위작업, 상태 필터를 한 줄에 강제 가로 배치
+            st.markdown("""
+            <style>
+            [data-testid="column"] {
+                min-width: 0 !important;
+                flex: 1 !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            col_search, col_upper, col_status = st.columns(3)
             with col_search:
-                search_query = st.text_input("🔍 검색", placeholder="작업명...", key="task_search", label_visibility="collapsed")
+                search_query = st.text_input("🔍", placeholder="검색", key="task_search", label_visibility="collapsed")
             with col_upper:
-                selected_upper = st.multiselect("📂 상위", all_upper, default=list(all_upper), key="filter_upper", placeholder="상위 작업", label_visibility="collapsed")
+                selected_upper = st.multiselect("📂", all_upper, default=list(all_upper), key="filter_upper", placeholder="상위 작업", label_visibility="collapsed")
             with col_status:
-                selected_status = st.multiselect("🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="상태", label_visibility="collapsed")
+                selected_status = st.multiselect("🏷️", all_statuses, default=list(all_statuses), key="filter_status", placeholder="상태", label_visibility="collapsed")
         else:
             # PC 모드: 기존 레이아웃
             col_search, col_empty = st.columns([1, 1])
