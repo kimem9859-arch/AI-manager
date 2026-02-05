@@ -345,42 +345,21 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# 상위 작업별 진행률 게이지 바
+# 상위 작업별 진행률 게이지 바 (접기/펼치기 가능)
 if upper_task_progress:
-    # 게이지바 컨테이너 열기
-    gauge_cols = st.columns(min(len(upper_task_progress), 4))
+    # 전체 평균 진행률 계산
+    avg_progress = int(sum(upper_task_progress.values()) / len(upper_task_progress))
     
-    for idx, (upper_name, progress) in enumerate(upper_task_progress.items()):
-        progress_int = int(progress)
+    with st.expander(f"📊 상위 작업 진행률 (평균: {avg_progress}%)", expanded=False):
+        gauge_cols = st.columns(min(len(upper_task_progress), 4))
         
-        # 진행률에 따른 색상 (10% 단위: 빨강 → 주황 → 노랑 → 초록 → 파랑)
-        if progress_int <= 10:
-            bar_color = "#E53935"
-        elif progress_int <= 20:
-            bar_color = "#F4511E"
-        elif progress_int <= 30:
-            bar_color = "#FF9800"
-        elif progress_int <= 40:
-            bar_color = "#FFB300"
-        elif progress_int <= 50:
-            bar_color = "#FDD835"
-        elif progress_int <= 60:
-            bar_color = "#C0CA33"
-        elif progress_int <= 70:
-            bar_color = "#7CB342"
-        elif progress_int <= 80:
-            bar_color = "#43A047"
-        elif progress_int <= 90:
-            bar_color = "#26A69A"
-        else:
-            bar_color = "#2196F3"
-        
-        bar_width = max(progress_int, 3)
-        col_idx = idx % len(gauge_cols)
-        
-        with gauge_cols[col_idx]:
-            st.caption(f"📂 {upper_name}")
-            st.progress(progress_int / 100, text=f"{progress_int}%")
+        for idx, (upper_name, progress) in enumerate(upper_task_progress.items()):
+            progress_int = int(progress)
+            col_idx = idx % len(gauge_cols)
+            
+            with gauge_cols[col_idx]:
+                st.caption(f"📂 {upper_name}")
+                st.progress(progress_int / 100, text=f"{progress_int}%")
 
 # 탭 구성 (채팅창 제거, 전체 너비 사용)
 tab_sheet, tab_items = st.tabs(["📊 작업 현황", "📦 물품 견적"])
