@@ -566,8 +566,9 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
         8. 비고 삭제 (~ 비고 삭제해줘):
            {{"action": "clear_cell", "target": "작업명", "column": "비고"}}
            
-        9. 공지 변경 (~로 공지 변경):
+        9. 공지 변경 (~로 공지 변경, 공지사항 ~로 변경):
            {{"action": "notice", "content": "새로운 공지 내용"}}
+           ("공지" 또는 "공지사항" 모두 같은 명령으로 인식)
            
         10. 일반 대화:
             {{"action": "chat", "response": "할말"}}
@@ -599,6 +600,9 @@ if prompt := st.chat_input("명령을 입력하세요 (예: 공지사항 '내일
         
         Q: "내일 회의로 공지 변경해줘"
         A: {{"action": "notice", "content": "내일 회의"}}
+        
+        Q: "공지사항 '프로젝트 마감일 연장'으로 변경해줘"
+        A: {{"action": "notice", "content": "프로젝트 마감일 연장"}}
         """
 
         try:
