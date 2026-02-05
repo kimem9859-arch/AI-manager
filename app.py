@@ -270,7 +270,17 @@ if not df_items.empty:
 # ----------------------------------------------------------
 # 3. 화면 UI 구성
 # ----------------------------------------------------------
-st.title("🤖 든든한 프로젝트 매니저")
+# 제목 (스타일 적용)
+st.markdown("""
+<h1 style="font-family: 'Segoe UI', 'Arial', sans-serif; font-weight: 700; letter-spacing: -1px;">
+    🤖 Project Manager
+</h1>
+""", unsafe_allow_html=True)
+
+# 공지사항 (상단 배치)
+current_notice = get_notice()
+if current_notice not in ["-", "공지없음", "공지 연결 실패", ""]:
+    st.info(f"**📢 공지:** {current_notice}")
 
 # 사이드바
 with st.sidebar:
@@ -479,9 +489,6 @@ with c_items:
 # --- [탭 3] 채팅 및 AI 처리 (여기가 핵심!) ---
 with c_chat:
     # 채팅방 헤더
-    current_notice = get_notice()
-    if current_notice not in ["-", "공지없음", "공지 연결 실패"]:
-        st.info(f" **공지:** {current_notice}", icon="📢")
     st.subheader("💬 AI 매니저")
 
     # 대화 기록 표시
