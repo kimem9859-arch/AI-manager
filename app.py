@@ -347,55 +347,40 @@ st.markdown(f"""
 
 # 상위 작업별 진행률 게이지 바
 if upper_task_progress:
-    progress_html = '<div style="display:flex; flex-wrap:wrap; gap:15px; background-color:rgba(100,100,100,0.05); padding:15px; border-radius:10px; margin-bottom:20px; border:1px solid rgba(255,255,255,0.1);">'
-    for upper_name, progress in upper_task_progress.items():
+    # 게이지바 컨테이너 열기
+    gauge_cols = st.columns(min(len(upper_task_progress), 4))
+    
+    for idx, (upper_name, progress) in enumerate(upper_task_progress.items()):
         progress_int = int(progress)
         
         # 진행률에 따른 색상 (10% 단위: 빨강 → 주황 → 노랑 → 초록 → 파랑)
         if progress_int <= 10:
-            bar_color = "#E53935"  # 빨강
-            text_color = "#FFFFFF"  # 흰색
+            bar_color = "#E53935"
         elif progress_int <= 20:
-            bar_color = "#F4511E"  # 빨강-주황
-            text_color = "#FFFFFF"
+            bar_color = "#F4511E"
         elif progress_int <= 30:
-            bar_color = "#FF9800"  # 주황
-            text_color = "#000000"  # 검정
+            bar_color = "#FF9800"
         elif progress_int <= 40:
-            bar_color = "#FFB300"  # 주황-노랑
-            text_color = "#000000"
+            bar_color = "#FFB300"
         elif progress_int <= 50:
-            bar_color = "#FDD835"  # 노랑
-            text_color = "#000000"
+            bar_color = "#FDD835"
         elif progress_int <= 60:
-            bar_color = "#C0CA33"  # 노랑-초록
-            text_color = "#000000"
+            bar_color = "#C0CA33"
         elif progress_int <= 70:
-            bar_color = "#7CB342"  # 연두
-            text_color = "#FFFFFF"
+            bar_color = "#7CB342"
         elif progress_int <= 80:
-            bar_color = "#43A047"  # 초록
-            text_color = "#FFFFFF"
+            bar_color = "#43A047"
         elif progress_int <= 90:
-            bar_color = "#26A69A"  # 청록
-            text_color = "#FFFFFF"
+            bar_color = "#26A69A"
         else:
-            bar_color = "#2196F3"  # 파랑 (100%)
-            text_color = "#FFFFFF"
+            bar_color = "#2196F3"
         
-        # 진행률이 낮을 때 텍스트가 바 바깥에 표시되도록 처리
-        bar_width = max(progress_int, 5)  # 최소 너비 5%
-        progress_html += f'''
-        <div style="flex:1; min-width:200px; max-width:300px;">
-            <div style="font-size:0.9em; margin-bottom:5px;">📂 {upper_name}</div>
-            <div style="background-color:rgba(200,200,200,0.3); border-radius:10px; height:20px; overflow:visible; position:relative;">
-                <div style="background-color:{bar_color}; width:{bar_width}%; height:100%; border-radius:10px;"></div>
-                <span style="position:absolute; right:8px; top:50%; transform:translateY(-50%); font-size:0.75em; color:{text_color}; font-weight:bold; text-shadow: 0 0 3px rgba(0,0,0,0.3);">{progress_int}%</span>
-            </div>
-        </div>
-        '''
-    progress_html += '</div>'
-    st.markdown(progress_html, unsafe_allow_html=True)
+        bar_width = max(progress_int, 3)
+        col_idx = idx % len(gauge_cols)
+        
+        with gauge_cols[col_idx]:
+            st.caption(f"📂 {upper_name}")
+            st.progress(progress_int / 100, text=f"{progress_int}%")
 
 # 탭 구성 (채팅창 제거, 전체 너비 사용)
 tab_sheet, tab_items = st.tabs(["📊 작업 현황", "📦 물품 견적"])
