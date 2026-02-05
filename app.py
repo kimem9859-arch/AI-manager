@@ -225,17 +225,35 @@ def clear_cell_by_target(sheet_name, target, column_keyword):
 def get_last_modified_info():
     """스프레드시트의 마지막 수정 정보를 가져옴"""
     try:
-        client = get_spreadsheet()
-        # 스프레드시트의 마지막 수정 시간 (gspread에서 직접 지원하지 않으므로 Drive API 사용)
         from datetime import datetime
         
-        # 작업 시트의 마지막 셀 변경 시간 대신, 현재 시간 기준으로 표시
-        # (실제 수정 시간을 가져오려면 Drive API 별도 설정 필요)
-        last_update = datetime.now().strftime("%Y-%m-%d %H:%M")
+        spreadsheet = get_spreadsheet()
+        
+        # gspread client를 통해 Drive API로 파일 메타데이터 가져오기
+        gc = spreadsheet.client
+        file_metadata = gc.open_by_key(spreadsheet.id).fetch_sheet_metadata()
+        
+        # Drive API를 통해 수정 시간 가져오기
+        try:
+            file_info = gc.request('get', f'https://www.googleapis.com/drive/v3/files/{spreadsheet.id}?fields=modifiedTime')
+            modified_time_str = file_info.json().get('modifiedTime', '')
+            
+            if modified_time_str:
+                # ISO 형식을 파싱하여 한국 시간으로 변환
+                from datetime import timezone, timedelta
+                modified_time = datetime.fromisoformat(modified_time_str.replace('Z', '+00:00'))
+                # UTC -> KST (UTC+9)
+                kst = timezone(timedelta(hours=9))
+                modified_time_kst = modified_time.astimezone(kst)
+                last_update = modified_time_kst.strftime("%Y-%m-%d %H:%M")
+            else:
+                last_update = datetime.now().strftime("%Y-%m-%d %H:%M")
+        except:
+            last_update = datetime.now().strftime("%Y-%m-%d %H:%M")
         
         return {
-            "시트명": client.title,
-            "확인시간": last_update
+            "시트명": spreadsheet.title,
+            "수정시간": last_update
         }
     except Exception as e:
         return {"오류": str(e)}
@@ -326,7 +344,7 @@ with st.sidebar:
         st.markdown(f"""
         <div style="background-color:rgba(100,100,100,0.1); padding:10px; border-radius:8px; font-size:0.85em;">
             <p style="margin:5px 0;">📁 <b>시트:</b> {sheet_info.get('시트명', '-')}</p>
-            <p style="margin:5px 0;">🕐 <b>확인:</b> {sheet_info.get('확인시간', '-')}</p>
+            <p style="margin:5px 0;">🕐 <b>최종 수정:</b> {sheet_info.get('수정시간', '-')}</p>
             <p style="margin:5px 0;">📊 <b>작업:</b> {total}개 (완료: {done}개)</p>
         </div>
         """, unsafe_allow_html=True)
