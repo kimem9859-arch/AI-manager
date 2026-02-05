@@ -402,29 +402,23 @@ with c_sheet:
 # --- [탭 2] 물품 리스트 (검색 & 필터 & 링크 & 비용) ---
 with c_items:
     if not df_items.empty:
-        # 1. 상단 UI 구성 (검색창 + 상태 필터)
-        col_search, col_filter = st.columns([2, 1])
+        # 1. 상단 UI 구성 (검색창 위, 상태필터 아래)
+        search_item = st.text_input("📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...", key="item_search_input")
         
-        with col_search:
-            search_item = st.text_input("📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...", key="item_search_input")
+        # 필터링할 열 자동 감지 ('상태', '구분', '구매상태' 등)
+        filter_col = next((c for c in ['상태', '구분', '구매상태', 'Status'] if c in df_items.columns), None)
         
-        with col_filter:
-            # 필터링할 열 자동 감지 ('상태', '구분', '구매상태' 등)
-            filter_col = next((c for c in ['상태', '구분', '구매상태', 'Status'] if c in df_items.columns), None)
-            
-            if filter_col:
-                all_opts = df_items[filter_col].unique()
-                # 👇 [핵심 수정] key="item_filter"를 추가해서 작업 탭의 필터와 구분함!
-                selected_opts = st.multiselect(
-                    f"🏷️ {filter_col} 필터", 
-                    all_opts, 
-                    default=all_opts,
-                    key="item_filter_unique"
-                )
-            else:
-                selected_opts = []
-                # 공간 확보를 위해 빈 컨테이너 표시
-                st.empty() 
+        if filter_col:
+            # None, 빈칸 제외
+            all_opts = [s for s in df_items[filter_col].unique() if s and str(s).strip() not in ['', 'None', 'nan', '없음', '-']]
+            selected_opts = st.multiselect(
+                f"🏷️ {filter_col} 필터", 
+                all_opts, 
+                default=all_opts,
+                key="item_filter_unique"
+            )
+        else:
+            selected_opts = [] 
 
         # 2. 데이터 가공 및 필터링
         df_display = df_items.copy()
