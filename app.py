@@ -335,14 +335,23 @@ with st.sidebar:
         st.rerun()
     if st.button("❓ 도움말"): show_guide()
 
-# 상단 통계 카드
+# 상단 통계 카드 (모바일 모드 시 글자 크기 축소)
+if is_mobile:
+    label_size = "0.7em"
+    number_size = "14px"
+    padding = "10px"
+else:
+    label_size = "1em"
+    number_size = "20px"
+    padding = "15px"
+
 st.markdown(f"""
-    <div style="display:flex; justify-content:space-around; background-color:rgba(100,100,100,0.1); padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid rgba(255,255,255,0.1);">
-        <div style="text-align:center;">📌 전체 작업<br><b style="font-size:20px;">{total}</b></div>
-        <div style="text-align:center;">⏳ 대기/보류<br><b style="font-size:20px; color:#FF9800;">{pending}</b></div>
-        <div style="text-align:center;">▶️ 진행<br><b style="font-size:20px; color:#2196F3;">{in_progress}</b></div>
-        <div style="text-align:center;">🔍 수정/검토<br><b style="font-size:20px; color:#9C27B0;">{reviewing}</b></div>
-        <div style="text-align:center;">✅ 완료<br><b style="font-size:20px; color:#4CAF50;">{done}</b></div>
+    <div style="display:flex; justify-content:space-around; background-color:rgba(100,100,100,0.1); padding:{padding}; border-radius:10px; margin-bottom:10px; border:1px solid rgba(255,255,255,0.1);">
+        <div style="text-align:center; font-size:{label_size};">📌 전체 작업<br><b style="font-size:{number_size};">{total}</b></div>
+        <div style="text-align:center; font-size:{label_size};">⏳ 대기/보류<br><b style="font-size:{number_size}; color:#FF9800;">{pending}</b></div>
+        <div style="text-align:center; font-size:{label_size};">▶️ 진행<br><b style="font-size:{number_size}; color:#2196F3;">{in_progress}</b></div>
+        <div style="text-align:center; font-size:{label_size};">🔍 수정/검토<br><b style="font-size:{number_size}; color:#9C27B0;">{reviewing}</b></div>
+        <div style="text-align:center; font-size:{label_size};">✅ 완료<br><b style="font-size:{number_size}; color:#4CAF50;">{done}</b></div>
     </div>
 """, unsafe_allow_html=True)
 
