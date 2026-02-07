@@ -145,30 +145,20 @@ tab_sheet, tab_items = st.tabs(["📊 작업 현황", "📦 물품 견적"])
 # --- Tab 1: Task list ---
 with tab_sheet:
     if not df_task.empty:
-        if is_mobile:
-            st.markdown(
-                """
-            <style>
-            [data-testid="stExpander"] [data-testid="stTextInput"] { margin-top: 0px; margin-bottom: 10px; }
-            [data-testid="stTextInput"] > div > div > input { font-size: 0.9em; padding: 0.35rem 0.5rem; }
-            [data-testid="stTextInput"] > label { font-size: 0.9em; }
-            [data-testid="stMultiSelect"] > div, [data-testid="stMultiSelect"] > label, [data-testid="stMultiSelect"] span { font-size: 0.9em; }
-            </style>
-            """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                """
-            <style>
-            [data-testid="stTextInput"] { margin-top: -20px; margin-bottom: -10px; }
-            [data-testid="stTextInput"] > div > div > input { font-size: 0.9em; padding: 0.35rem 0.5rem; }
-            [data-testid="stTextInput"] > label { font-size: 0.9em; }
-            [data-testid="stMultiSelect"] > div, [data-testid="stMultiSelect"] > label, [data-testid="stMultiSelect"] span { font-size: 0.9em; }
-            </style>
-            """,
-                unsafe_allow_html=True,
-            )
+        st.markdown(
+            """
+        <style>
+        [data-testid="stTabs"] [data-testid="stExpander"] { margin-top: -20px !important; }
+        [data-testid="stTabs"] [data-testid="stDataFrame"],
+        [data-testid="stTabs"] [data-testid="stDataEditor"] { margin-top: -5px !important; }
+        [data-testid="stExpander"] [data-testid="stTextInput"] { margin-top: 0px; margin-bottom: 10px; }
+        [data-testid="stTextInput"] > div > div > input { font-size: 0.9em; padding: 0.35rem 0.5rem; }
+        [data-testid="stTextInput"] > label { font-size: 0.9em; }
+        [data-testid="stMultiSelect"] > div, [data-testid="stMultiSelect"] > label, [data-testid="stMultiSelect"] span { font-size: 0.9em; }
+        </style>
+        """,
+            unsafe_allow_html=True,
+        )
 
         # 작업 현황 시트 행 내용에 따라 필터 옵션 적용
         if "상위 작업" in df_task.columns:
@@ -188,18 +178,7 @@ with tab_sheet:
         else:
             all_statuses = []
 
-        if is_mobile:
-            with st.expander("🔍 검색 및 필터", expanded=False):
-                search_query = st.text_input(
-                    "🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search"
-                )
-                selected_upper = st.multiselect(
-                    "📂 상위 작업", all_upper, default=[], key="filter_upper", placeholder="필터 선택"
-                )
-                selected_status = st.multiselect(
-                    "🏷️ 상태", all_statuses, default=[], key="filter_status", placeholder="필터 선택"
-                )
-        else:
+        with st.expander("🔍 검색 및 필터", expanded=False):
             col_search, _ = st.columns([1, 1])
             with col_search:
                 search_query = st.text_input(
@@ -292,7 +271,7 @@ with tab_items:
         st.markdown(
             """
         <style>
-        [data-testid="stTextInput"] { margin-top: -20px; margin-bottom: -10px; }
+        [data-testid="stExpander"] [data-testid="stTextInput"] { margin-top: 0px; margin-bottom: 10px; }
         [data-testid="stTextInput"] > div > div > input { font-size: 0.9em; padding: 0.35rem 0.5rem; }
         [data-testid="stTextInput"] > label { font-size: 0.9em; }
         [data-testid="stMultiSelect"] > div, [data-testid="stMultiSelect"] > label, [data-testid="stMultiSelect"] span { font-size: 0.9em; }
@@ -300,47 +279,48 @@ with tab_items:
         """,
             unsafe_allow_html=True,
         )
-        # 물품 검색: 작업 현황 작업 검색과 동일한 크기·위치
-        col_search_item, _ = st.columns([1, 1])
-        with col_search_item:
-            search_item = st.text_input(
-                "📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...", key="item_search_input"
-            )
-        # 구분·상태 필터: 작업 현황 상위 작업·상태와 동일한 배치 (구분 왼쪽, 상태 오른쪽)
-        # 물품 점검 시트 행 내용에 따라 필터 옵션 적용
-        col_구분, col_상태 = st.columns([1, 1])
-        if "구분" in df_items.columns:
-            all_구분 = [
-                s
-                for s in df_items["구분"].dropna().unique().tolist()
-                if str(s).strip()
-            ]
-            with col_구분:
-                selected_구분 = st.multiselect(
-                    "📂 구분",
-                    all_구분,
-                    default=[],
-                    key="item_filter_구분",
-                    placeholder="필터 선택",
+        with st.expander("🔍 검색 및 필터", expanded=False):
+            # 물품 검색: 작업 현황 작업 검색과 동일한 크기·위치
+            col_search_item, _ = st.columns([1, 1])
+            with col_search_item:
+                search_item = st.text_input(
+                    "📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...", key="item_search_input"
                 )
-        else:
-            selected_구분 = []
-        if "상태" in df_items.columns:
-            all_상태 = [
-                s
-                for s in df_items["상태"].dropna().unique().tolist()
-                if str(s).strip()
-            ]
-            with col_상태:
-                selected_상태 = st.multiselect(
-                    "🏷️ 상태",
-                    all_상태,
-                    default=[],
-                    key="item_filter_상태",
-                    placeholder="필터 선택",
-                )
-        else:
-            selected_상태 = []
+            # 구분·상태 필터: 작업 현황 상위 작업·상태와 동일한 배치 (구분 왼쪽, 상태 오른쪽)
+            # 물품 점검 시트 행 내용에 따라 필터 옵션 적용
+            col_구분, col_상태 = st.columns([1, 1])
+            if "구분" in df_items.columns:
+                all_구분 = [
+                    s
+                    for s in df_items["구분"].dropna().unique().tolist()
+                    if str(s).strip()
+                ]
+                with col_구분:
+                    selected_구분 = st.multiselect(
+                        "📂 구분",
+                        all_구분,
+                        default=[],
+                        key="item_filter_구분",
+                        placeholder="필터 선택",
+                    )
+            else:
+                selected_구분 = []
+            if "상태" in df_items.columns:
+                all_상태 = [
+                    s
+                    for s in df_items["상태"].dropna().unique().tolist()
+                    if str(s).strip()
+                ]
+                with col_상태:
+                    selected_상태 = st.multiselect(
+                        "🏷️ 상태",
+                        all_상태,
+                        default=[],
+                        key="item_filter_상태",
+                        placeholder="필터 선택",
+                    )
+            else:
+                selected_상태 = []
         df_display = df_items.copy()
         if "구분" in df_display.columns and selected_구분:
             df_display = df_display[df_display["구분"].isin(selected_구분)]
