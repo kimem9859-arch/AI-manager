@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Loading Overlay</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(30, 30, 30, 0.92);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-wrapper { width: 200px; height: 200px; }
+    .logo-svg { width: 100%; height: 100%; overflow: visible; }
+    .logo-svg path {
+      fill: none;
+      stroke-linecap: square;
+      stroke-linejoin: miter;
+      stroke-width: 18;
+    }
+    .logo-svg path.path-base {
+      stroke: rgba(221, 221, 221, 0.6);
+      stroke-dasharray: none;
+      stroke-dashoffset: 0;
+    }
+    .logo-svg path.path-yellow {
+      stroke: #FFC107;
+      animation: drawYellow 2.5s ease-in-out infinite;
+    }
+    .logo-svg path.path-orange {
+      stroke: #FF5722;
+      animation: drawOrange 2.5s ease-in-out infinite;
+    }
+    @keyframes drawYellow {
+      0% { stroke-dashoffset: var(--path-yellow-length); }
+      45% { stroke-dashoffset: 0; }
+      55% { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: var(--path-yellow-length); }
+    }
+    @keyframes drawOrange {
+      0% { stroke-dashoffset: var(--path-orange-length); }
+      45% { stroke-dashoffset: 0; }
+      55% { stroke-dashoffset: 0; }
+      100% { stroke-dashoffset: var(--path-orange-length); }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay">
+    <div class="logo-wrapper">
+      <svg class="logo-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <path class="path-base" d="M 45 175 L 90 175 L 110 140 L 130 105 L 140 105 L 155 85" />
+        <path class="path-base" d="M 175 45 L 130 45 L 110 80 L 90 115 L 80 115 L 65 135" />
+        <path id="path-yellow" class="path-yellow" d="M 45 175 L 90 175 L 110 140 L 130 105 L 140 105 L 155 85" style="--path-yellow-length: 0;" />
+        <path id="path-orange" class="path-orange" d="M 175 45 L 130 45 L 110 80 L 90 115 L 80 115 L 65 135" style="--path-orange-length: 0;" />
+      </svg>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var pY = document.getElementById('path-yellow');
+      var pO = document.getElementById('path-orange');
+      var lY = pY.getTotalLength();
+      var lO = pO.getTotalLength();
+      pY.style.setProperty('--path-yellow-length', lY);
+      pY.style.strokeDasharray = lY;
+      pY.style.strokeDashoffset = lY;
+      pO.style.setProperty('--path-orange-length', lO);
+      pO.style.strokeDasharray = lO;
+      pO.style.strokeDashoffset = lO;
+    })();
+  </script>
+</body>
+</html>
