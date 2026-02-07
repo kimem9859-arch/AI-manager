@@ -1,8 +1,18 @@
-# 비밀 파일은 무시해!
+# 1. [보안 필수] 절대 올리면 안 되는 비밀 파일들
+service_account.json
 .streamlit/secrets.toml
 secrets.toml
+.env
 
-# (선택) 지저분한 폴더들도 무시해
+# 2. [용량 낭비 방지] 파이썬 자동 생성 파일들
 __pycache__/
+*.pyc
 
-service_account.json
+# 3. [중요] 가상환경 폴더 (이거 안 빼면 파일 수천 개가 올라가요!)
+venv/
+.venv/
+env/
+
+# 4. [운영체제] 윈도우/맥 지저분한 파일 무시
+.DS_Store
+Thumbs.db

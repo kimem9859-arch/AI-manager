@@ -1,0 +1,13 @@
+---
+description: AI prompts must be edited in English only (no Korean for instructions)
+globs: prompts/*.txt
+alwaysApply: false
+---
+
+# AI Prompt Edit Rule
+
+When editing files in `prompts/` (especially `ai_system_prompt.txt`):
+
+- **Write and modify all instruction text in English only.** Do not use Korean for rules, descriptions, or command explanations.
+- Korean may appear only inside example user queries (Q:) and example responses (A:) where they are sample data.
+- Keep placeholders `{task_headers}`, `{task_full_data}`, `{items_full_data}` as-is; they are filled at runtime.
