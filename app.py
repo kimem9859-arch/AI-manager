@@ -194,10 +194,10 @@ with tab_sheet:
                     "🔍 작업 검색", placeholder="작업명을 입력하세요...", key="task_search"
                 )
                 selected_upper = st.multiselect(
-                    "📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택"
+                    "📂 상위 작업", all_upper, default=[], key="filter_upper", placeholder="필터 선택"
                 )
                 selected_status = st.multiselect(
-                    "🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택"
+                    "🏷️ 상태", all_statuses, default=[], key="filter_status", placeholder="필터 선택"
                 )
         else:
             col_search, _ = st.columns([1, 1])
@@ -208,11 +208,11 @@ with tab_sheet:
             col_upper, col_status = st.columns([1, 1])
             with col_upper:
                 selected_upper = st.multiselect(
-                    "📂 상위 작업", all_upper, default=list(all_upper), key="filter_upper", placeholder="필터 선택"
+                    "📂 상위 작업", all_upper, default=[], key="filter_upper", placeholder="필터 선택"
                 )
             with col_status:
                 selected_status = st.multiselect(
-                    "🏷️ 상태", all_statuses, default=list(all_statuses), key="filter_status", placeholder="필터 선택"
+                    "🏷️ 상태", all_statuses, default=[], key="filter_status", placeholder="필터 선택"
                 )
 
         df_view = df_task.copy()
@@ -319,7 +319,7 @@ with tab_items:
                 selected_구분 = st.multiselect(
                     "📂 구분",
                     all_구분,
-                    default=list(all_구분),
+                    default=[],
                     key="item_filter_구분",
                     placeholder="필터 선택",
                 )
@@ -335,7 +335,7 @@ with tab_items:
                 selected_상태 = st.multiselect(
                     "🏷️ 상태",
                     all_상태,
-                    default=list(all_상태),
+                    default=[],
                     key="item_filter_상태",
                     placeholder="필터 선택",
                 )
