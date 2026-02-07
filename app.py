@@ -170,19 +170,20 @@ with tab_sheet:
                 unsafe_allow_html=True,
             )
 
+        # 작업 현황 시트 행 내용에 따라 필터 옵션 적용
         if "상위 작업" in df_task.columns:
             all_upper = [
                 s
-                for s in df_task["상위 작업"].unique()
-                if s and str(s).strip() not in ["", "None", "nan", "없음"]
+                for s in df_task["상위 작업"].dropna().unique().tolist()
+                if str(s).strip()
             ]
         else:
             all_upper = []
         if "상태" in df_task.columns:
             all_statuses = [
                 s
-                for s in df_task["상태"].unique()
-                if s and str(s).strip() not in ["", "None", "nan", "없음"]
+                for s in df_task["상태"].dropna().unique().tolist()
+                if str(s).strip()
             ]
         else:
             all_statuses = []
@@ -299,31 +300,52 @@ with tab_items:
         """,
             unsafe_allow_html=True,
         )
-        search_item = st.text_input(
-            "📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...", key="item_search_input"
-        )
-        filter_col = next(
-            (c for c in ["상태", "구분", "구매상태", "Status"] if c in df_items.columns),
-            None,
-        )
-        if filter_col:
-            all_opts = [
-                s
-                for s in df_items[filter_col].unique()
-                if s and str(s).strip() not in ["", "None", "nan", "없음", "-"]
-            ]
-            selected_opts = st.multiselect(
-                f"🏷️ {filter_col} 필터",
-                all_opts,
-                default=all_opts,
-                key="item_filter_unique",
-                placeholder="필터 선택",
+        # 물품 검색: 작업 현황 작업 검색과 동일한 크기·위치
+        col_search_item, _ = st.columns([1, 1])
+        with col_search_item:
+            search_item = st.text_input(
+                "📦 물품 검색", placeholder="품목명, 비고 등을 입력하세요...", key="item_search_input"
             )
+        # 구분·상태 필터: 작업 현황 상위 작업·상태와 동일한 배치 (구분 왼쪽, 상태 오른쪽)
+        # 물품 점검 시트 행 내용에 따라 필터 옵션 적용
+        col_구분, col_상태 = st.columns([1, 1])
+        if "구분" in df_items.columns:
+            all_구분 = [
+                s
+                for s in df_items["구분"].dropna().unique().tolist()
+                if str(s).strip()
+            ]
+            with col_구분:
+                selected_구분 = st.multiselect(
+                    "📂 구분",
+                    all_구분,
+                    default=list(all_구분),
+                    key="item_filter_구분",
+                    placeholder="필터 선택",
+                )
         else:
-            selected_opts = []
+            selected_구분 = []
+        if "상태" in df_items.columns:
+            all_상태 = [
+                s
+                for s in df_items["상태"].dropna().unique().tolist()
+                if str(s).strip()
+            ]
+            with col_상태:
+                selected_상태 = st.multiselect(
+                    "🏷️ 상태",
+                    all_상태,
+                    default=list(all_상태),
+                    key="item_filter_상태",
+                    placeholder="필터 선택",
+                )
+        else:
+            selected_상태 = []
         df_display = df_items.copy()
-        if filter_col and selected_opts:
-            df_display = df_display[df_display[filter_col].isin(selected_opts)]
+        if "구분" in df_display.columns and selected_구분:
+            df_display = df_display[df_display["구분"].isin(selected_구분)]
+        if "상태" in df_display.columns and selected_상태:
+            df_display = df_display[df_display["상태"].isin(selected_상태)]
         if search_item:
             mask = df_display.iloc[:, 0].astype(str).str.contains(
                 search_item, case=False, na=False
